@@ -1,0 +1,670 @@
+ok moving to next. i need seperate .csv for outputs and seperate route.
+
+Website is : adselektromarket 
+
+first we need to visit page : 
+https://www.adselektromarket.com/srv/service/category/get/ 
+
+this will contains list of available categories 
+[
+  {
+    "ID": "242",
+    "TITLE": "Şalt (Elektrifikasyon) Ürünleri",
+    "LINK": "salt-elektrifikasyon-urunleri",
+    "IMAGE": "",
+    "IMG1": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    },
+    "IMG2": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    }
+  },
+  {
+    "ID": "227",
+    "TITLE": "Sürücüler",
+    "LINK": "suruculer",
+    "IMAGE": "",
+    "IMG1": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    },
+    "IMG2": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    }
+  },
+  {
+    "ID": "220",
+    "TITLE": "Elektrik Motorları",
+    "LINK": "elektrik-motorlari",
+    "IMAGE": "",
+    "IMG1": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    },
+    "IMG2": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    }
+  },
+  {
+    "ID": "223",
+    "TITLE": "PLC Otomasyon Ürünleri",
+    "LINK": "plc-otomasyon-urunleri",
+    "IMAGE": "",
+    "IMG1": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    },
+    "IMG2": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    }
+  },
+  {
+    "ID": "244",
+    "TITLE": "Servis Ürünleri",
+    "LINK": "servis-urunleri",
+    "IMAGE": "",
+    "IMG1": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    },
+    "IMG2": {
+      "PATH": "",
+      "SIZE": null,
+      "WIDTH": null,
+      "HEIGHT": null,
+      "EXT": ""
+    }
+  }
+]
+
+
+then for each cateogry we should go to pages 
+https://www.adselektromarket.com/salt-elektrifikasyon-urunleri?pg=1
+https://www.adselektromarket.com/{category link}?pg={pagenumber}
+
+
+
+then we should scrape all products in page by running this code on puppeteer dev tools console 
+var products = PRODUCT_DATA
+
+which will return something liek 
+
+[
+    {
+        "id": "9864",
+        "name": "PSR9-600-70 ( 4 kW )",
+        "code": "T9864",
+        "supplier_code": "1SFA896105R7000",
+        "sale_price": 3104.898876,
+        "total_base_price": 10349.66,
+        "total_sale_price": 3725.88,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-psr9-600-70-4-kw-psr-serisi-8653-98-O.jpg",
+        "quantity": 26,
+        "url": "abb-psr9-600-70-4-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSR Serisi",
+        "category_id": "304",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9865",
+        "name": "PSR6-600-70 ( 3 kW )",
+        "code": "T9865",
+        "supplier_code": "1SFA896104R7000",
+        "sale_price": 3104.898876,
+        "total_base_price": 10349.66,
+        "total_sale_price": 3725.88,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-psr6-600-70-3-kw-psr-serisi-8654-98-O.jpg",
+        "quantity": 6,
+        "url": "abb-psr6-600-70-3-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSR Serisi",
+        "category_id": "304",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9866",
+        "name": "PSR3-600-70 ( 1,5 kW )",
+        "code": "T9866",
+        "supplier_code": "1SFA896103R7000",
+        "sale_price": 2963.050704,
+        "total_base_price": 9876.84,
+        "total_sale_price": 3555.66,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-psr3-600-70-15-kw-psr-serisi-8655-98-O.jpg",
+        "quantity": 1,
+        "url": "abb-psr3-600-70-15-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSR Serisi",
+        "category_id": "304",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9842",
+        "name": "PSE170-600-70 ( 90 kW )",
+        "code": "T9842",
+        "supplier_code": "1SFA897111R7000",
+        "sale_price": 44871.305076,
+        "total_base_price": 149571.02,
+        "total_sale_price": 53845.57,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-pse170-600-70-90-kw-pse-serisi-8631-98-O.jpg",
+        "quantity": 1,
+        "url": "abb-pse170-600-70-90-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSE Serisi",
+        "category_id": "303",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9844",
+        "name": "PSE105-600-70 ( 55 kW )",
+        "code": "T9844",
+        "supplier_code": "1SFA897109R7000",
+        "sale_price": 30591.922428,
+        "total_base_price": 101973.07,
+        "total_sale_price": 36710.31,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-pse105-600-70-55-kw-pse-serisi-8633-98-O.jpg",
+        "quantity": 1,
+        "url": "abb-pse105-600-70-55-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSE Serisi",
+        "category_id": "303",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9845",
+        "name": "PSE85-600-70 ( 45 kW )",
+        "code": "T9845",
+        "supplier_code": "1SFA897108R7000",
+        "sale_price": 24539.733756,
+        "total_base_price": 81799.11,
+        "total_sale_price": 29447.68,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-pse85-600-70-45-kw-pse-serisi-8634-98-O.jpg",
+        "quantity": 1,
+        "url": "abb-pse85-600-70-45-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSE Serisi",
+        "category_id": "303",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9848",
+        "name": "PSE45-600-70 ( 22 kW )",
+        "code": "T9848",
+        "supplier_code": "1SFA897105R7000",
+        "sale_price": 15619.05982799,
+        "total_base_price": 52063.53,
+        "total_sale_price": 18742.87,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-pse45-600-70-22-kw-pse-serisi-8637-98-O.jpg",
+        "quantity": 1,
+        "url": "abb-pse45-600-70-22-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSE Serisi",
+        "category_id": "303",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9852",
+        "name": "PSE18-600-70 ( 7,5 kW )",
+        "code": "T9852",
+        "supplier_code": "1SFA897101R7000",
+        "sale_price": 13538.61997199,
+        "total_base_price": 45128.73,
+        "total_sale_price": 16246.34,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-pse18-600-70-75-kw-pse-serisi-8641-98-O.jpg",
+        "quantity": 1,
+        "url": "abb-pse18-600-70-75-kw",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSE Serisi",
+        "category_id": "303",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "9853",
+        "name": "PSEEK",
+        "code": "T9853",
+        "supplier_code": "1SFA897100R1001",
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-pseek-pse-serisi-8642-98-O.jpg",
+        "quantity": 1,
+        "url": "abb-pseek",
+        "currency": "EUR",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "PSE Serisi",
+        "category_id": "303",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > Soft Starter > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "8680",
+        "name": "SH 201-B 6",
+        "code": "T8680",
+        "supplier_code": "2CDS211001R0065",
+        "sale_price": "92.896",
+        "total_base_price": 348.36,
+        "total_sale_price": 111.48,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-sh-201-b-6-otomatik-sigortalar-7483-86-O.jpg",
+        "quantity": 482,
+        "url": "abb-sh-201-b-6",
+        "currency": "TL",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "Otomatik Sigortalar",
+        "category_id": "262",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > DIN Rayı Ürünleri > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "8628",
+        "name": "SH 203-C 50 NA",
+        "code": "T8628",
+        "supplier_code": "2CDS213103R0504",
+        "sale_price": "690.24",
+        "total_base_price": 2588.4,
+        "total_sale_price": 828.29,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-sh-203-c-50-na-otomatik-sigortalar-7431-86-O.jpg",
+        "quantity": 9,
+        "url": "abb-sh-203-c-50-na",
+        "currency": "TL",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "Otomatik Sigortalar",
+        "category_id": "262",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > DIN Rayı Ürünleri > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "8629",
+        "name": "SH 203-C 40 NA",
+        "code": "T8629",
+        "supplier_code": "2CDS213103R0404",
+        "sale_price": "598.08",
+        "total_base_price": 2242.8,
+        "total_sale_price": 717.7,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-sh-203-c-40-na-otomatik-sigortalar-7432-86-O.jpg",
+        "quantity": 3,
+        "url": "abb-sh-203-c-40-na",
+        "currency": "TL",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "Otomatik Sigortalar",
+        "category_id": "262",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > DIN Rayı Ürünleri > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "8630",
+        "name": "SH 203-C 32 NA",
+        "code": "T8630",
+        "supplier_code": "2CDS213103R0324",
+        "sale_price": "575.04",
+        "total_base_price": 2156.4,
+        "total_sale_price": 690.05,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-sh-203-c-32-na-otomatik-sigortalar-7433-86-O.jpg",
+        "quantity": 5,
+        "url": "abb-sh-203-c-32-na",
+        "currency": "TL",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "Otomatik Sigortalar",
+        "category_id": "262",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > DIN Rayı Ürünleri > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "8631",
+        "name": "SH 203-C 25 NA",
+        "code": "T8631",
+        "supplier_code": "2CDS213103R0254",
+        "sale_price": "460.16",
+        "total_base_price": 1725.6,
+        "total_sale_price": 552.19,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-sh-203-c-25-na-otomatik-sigortalar-7434-86-O.jpg",
+        "quantity": 45,
+        "url": "abb-sh-203-c-25-na",
+        "currency": "TL",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "Otomatik Sigortalar",
+        "category_id": "262",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > DIN Rayı Ürünleri > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "8632",
+        "name": "SH 203-C 20 NA",
+        "code": "T8632",
+        "supplier_code": "2CDS213103R0204",
+        "sale_price": "460.16",
+        "total_base_price": 1725.6,
+        "total_sale_price": 552.19,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-sh-203-c-20-na-otomatik-sigortalar-7435-86-O.jpg",
+        "quantity": 20,
+        "url": "abb-sh-203-c-20-na",
+        "currency": "TL",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "Otomatik Sigortalar",
+        "category_id": "262",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > DIN Rayı Ürünleri > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    },
+    {
+        "id": "8633",
+        "name": "SH 203-C 16 NA",
+        "code": "T8633",
+        "supplier_code": "2CDS213103R0164",
+        "sale_price": "460.16",
+        "total_base_price": 1725.6,
+        "total_sale_price": 552.19,
+        "vat": 20,
+        "subproduct_code": "",
+        "subproduct_id": 0,
+        "image": "https://www.adselektromarket.com/abb-abb-sh-203-c-16-na-otomatik-sigortalar-7436-86-O.jpg",
+        "quantity": 144,
+        "url": "abb-sh-203-c-16-na",
+        "currency": "TL",
+        "currency_target": "TL",
+        "brand": "ABB",
+        "category": "Otomatik Sigortalar",
+        "category_id": "262",
+        "category_path": "Şalt (Elektrifikasyon) Ürünleri > DIN Rayı Ürünleri > ",
+        "model": "",
+        "personalization_id": null,
+        "variant1": null,
+        "variant2": null
+    }
+] 
+
+
+we shoudl loop through all pages available for each cateogry. add prodcut data to csv after each page, 
+This contains all information i need about product. 
+Lets try to obtain those fields 
+name,url,image,stockCode,description,productId,stock,quantity,price by using data above (keys might be differened in data - lets try to map them )
+
+
+
+Below my current logic for another website, you can use it as reference - do not just copy pase it - 
+
+
+const express = require('express');
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
+const router = express.Router();
+
+router.get('/', async (req, res) => {
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const page = await browser.newPage();
+
+  // Block unnecessary resources
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    const type = req.resourceType();
+    const allowed = ['document', 'xhr', 'fetch', 'script'];
+    if (allowed.includes(type)) {
+      req.continue();
+    } else {
+      req.abort();
+    }
+  });
+
+  const products = [];
+  let currentPage = 1;
+
+  const csvHeaders = [
+    'name',
+    'url',
+    'image',
+    'stockCode',
+    'description',
+    'productId',
+    'stock',
+    'quantity',
+    'price'
+  ];
+
+  const outputPath = path.join(__dirname, '..', 'outputs', 'agonepay.csv');
+  fs.writeFileSync(outputPath, csvHeaders.join(',') + '\n', 'utf-8');
+
+  // Helper to get stock/price info
+  const getStockData = async (page, productId) => {
+    return await page.evaluate(async (productId) => {
+      try {
+        const response = await fetch('index.php?route=journal3/price', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+          },
+          body: new URLSearchParams({ product_id: productId })
+        });
+        const json = await response.json();
+        return {
+          stock: json?.response?.stock || null,
+          quantity: json?.response?.quantity || null,
+          price: json?.response?.price || null
+        };
+      } catch (e) {
+        return { stock: null, quantity: null, price: null };
+      }
+    }, productId);
+  };
+
+  try {
+    while (true) {
+      const url = `https://agonepay.com/index.php?route=product/search&search=&description=true&limit=500&page=${currentPage}`;
+      console.log(`Scraping page ${currentPage}: ${url}`);
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+      const hasProducts = await page.$('.main-products .product-layout');
+      if (!hasProducts) break;
+
+      const pageProducts = await page.evaluate(() => {
+        const items = document.querySelectorAll('.product-thumb');
+        return Array.from(items).map(el => {
+          return {
+            name: el.querySelector('.name a')?.innerText.trim() || '',
+            url: el.querySelector('.name a')?.href || '',
+            image: el.querySelector('img')?.src || '',
+            stockCode: el.querySelector('.stat-2 span:nth-child(2)')?.innerText.trim() || '',
+            description: el.querySelector('.description')?.innerText.trim() || '',
+            productId: el.querySelector('input[name="product_id"]')?.value || null
+          };
+        });
+      });
+
+      // Batched stock/price fetch (30 at a time)
+      const concurrencyLimit = 30;
+      let i = 0;
+
+      while (i < pageProducts.length) {
+        const batch = pageProducts.slice(i, i + concurrencyLimit);
+        await Promise.all(
+          batch.map(p =>
+            getStockData(page, p.productId).then(stockData => {
+              p.stock = stockData.stock;
+              p.quantity = stockData.quantity;
+
+              const rawPrice = stockData.price || '';
+              const numericPrice = parseFloat(
+                rawPrice.replace(/[^\d.,]/g, '').replace('.', '').replace(',', '.')
+              );
+              p.price = isNaN(numericPrice) ? null : numericPrice;
+            })
+          )
+        );
+        i += concurrencyLimit;
+      }
+
+      // Append to CSV
+      const csvRows = pageProducts.map(p =>
+        csvHeaders.map(h => `"${(p[h] || '').toString().replace(/"/g, '""')}"`).join(',')
+      );
+      fs.appendFileSync(outputPath, csvRows.join('\n') + '\n', 'utf-8');
+
+      products.push(...pageProducts);
+      console.log(`→ Done with page ${currentPage}, saved ${pageProducts.length} products.`);
+      currentPage++;
+    }
+
+    await browser.close();
+    res.json({ total: products.length, savedTo: outputPath });
+
+  } catch (err) {
+    await browser.close();
+    console.error(err);
+    res.status(500).send('Scraping failed.');
+  }
+});
+
+module.exports = router;
