@@ -9,6 +9,7 @@ const cliProgress = require('cli-progress');
 
 const router = express.Router();
 
+
 const OUTPUT_PATH = path.join(__dirname, '..', 'outputs', 'elektrofors-products.csv');
 const FAILED_LOG_PATH = path.join(__dirname, '..', 'outputs', 'failed-products.log');
 const CONCURRENCY = 80;
