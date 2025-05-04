@@ -41,6 +41,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Service account credentials
+/credentials/
+
+
 # Test coverage
 coverage/
 
