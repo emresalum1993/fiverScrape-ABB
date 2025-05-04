@@ -1,28 +1,25 @@
 steps:
-  # 1. Build Docker image with Artifact Registry tag
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'build', 
       '-t', 
-      'europe-west1-docker.pkg.dev/deli-df508/auto-migrated/fiverrr-scrape-abb', 
+      'europe-west1-docker.pkg.dev/deli-df508/scraper-images/fiverrr-scrape-abb', 
       '.'
     ]
 
-  # 2. Push image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'push', 
-      'europe-west1-docker.pkg.dev/deli-df508/auto-migrated/fiverrr-scrape-abb'
+      'europe-west1-docker.pkg.dev/deli-df508/scraper-images/fiverrr-scrape-abb'
     ]
 
-  # 3. Deploy to Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
       - 'deploy'
-      - 'fiverrr-scrape-abb'  # Cloud Run service name
+      - 'fiverrr-scrape-abb'
       - '--image'
-      - 'europe-west1-docker.pkg.dev/deli-df508/auto-migrated/fiverrr-scrape-abb'
+      - 'europe-west1-docker.pkg.dev/deli-df508/scraper-images/fiverrr-scrape-abb'
       - '--region'
       - 'europe-west1'
       - '--platform'
