@@ -1,18 +1,18 @@
 steps:
-  # Step 1: Build Docker image
+  # 1. Docker image oluştur
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/deli-df508/fiverrr-scrape-abb', '.']
 
-  # Step 2: Push image to Container Registry
+  # 2. Image'i Container Registry'ye gönder
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/deli-df508/fiverrr-scrape-abb']
 
-  # Step 3: Deploy to Cloud Run
+  # 3. Cloud Run'a deploy et
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
       - 'deploy'
-      - 'fiverrr-scrape-abb'
+      - 'fiverrr-scrape-abb'           # Cloud Run servis adı
       - '--image'
       - 'gcr.io/deli-df508/fiverrr-scrape-abb'
       - '--region'
@@ -20,3 +20,6 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
