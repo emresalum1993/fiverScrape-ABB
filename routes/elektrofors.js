@@ -223,6 +223,7 @@ router.get('/', async (req, res) => {
       })
     );
 
+    
     await Promise.all(tasks);
     progress.stop();
     await flushToDrive();
