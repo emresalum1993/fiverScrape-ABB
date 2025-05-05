@@ -18,27 +18,37 @@ const CONCURRENCY = 80;
 const PRICE_CONCURRENCY = 10;
 const MAX_RETRIES = 3;
 const FLUSH_INTERVAL_ROWS = 500;
-const HEADERS = ['productId', 'name', 'brand', 'price', 'stock', 'quantity', 'url', 'image', 'status'];
+
+// ✅ Use productId as first column
+const HEADERS = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price'];
 
 const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'elektrofors-products.csv');
 const DRIVE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
 
 const auth = new GoogleAuth({
-  scopes: ['https://www.googleapis.com/auth/drive.file'],
+  scopes: [
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/spreadsheets'
+  ],
   ...(process.env.NODE_ENV === 'local' && {
     keyFile: path.join(__dirname, '../credentials/deli-df508-036d92c21c6b.json')
   })
 });
 const drive = google.drive({ version: 'v3', auth });
+const sheets = google.sheets({ version: 'v4', auth });
+
+const SHEET_ID = '1lVDDt_mZjuld5Y7QIO9F-4bh9h2fimXGllX5RmOfA8w';
+const SHEET_NAME = 'elektrofors';
 
 let driveFileId = null;
 let isFirstWrite = !fs.existsSync(LOCAL_CSV_PATH);
 let rowCountSinceLastFlush = 0;
 const scrapedProductIds = new Set();
 
-// -------- CSV Utilities --------
 function csvRow(product) {
-  return HEADERS.map(key => `"${(product[key] || '').toString().replace(/"/g, '""')}"`).join(',') + '\n';
+  return HEADERS.map(key =>
+    `"${(product[key] || '').toString().replace(/"/g, '""')}"`
+  ).join(',') + '\n';
 }
 
 async function appendToLocalCSV(product) {
@@ -113,7 +123,7 @@ async function prepareDriveFileAndLoadExistingIds() {
   const file = res.data.files[0];
   if (file) {
     const modifiedTime = new Date(file.modifiedTime);
-    const age = Date.now() - modifiedTime.getTime();
+    const age = Date.now() - new Date(file.modifiedTime).getTime();
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
 
     if (age > oneWeek) {
@@ -131,11 +141,20 @@ async function prepareDriveFileAndLoadExistingIds() {
   }
 }
 
-function logFailure(productId, error) {
-  console.warn(`❌ Failed ${productId}: ${error.message}`);
+function parseCSV(filepath) {
+  const content = fs.readFileSync(filepath, 'utf8');
+  const rows = content.trim().split('\n').map(line =>
+    line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell =>
+      cell.replace(/^"|"$/g, '').replace(/""/g, '"')
+    )
+  );
+  return rows;
 }
 
-// -------- Utilities --------
+function logFailure(productId, error) {
+  console.warn(`❌ Failed ${productId || 'unknown'}: ${error.message}`);
+}
+
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -171,8 +190,6 @@ async function getTotalEstimatedProducts() {
 
 const priceLimit = pLimit(PRICE_CONCURRENCY);
 
-
-
 router.get('/', async (req, res) => {
   const routeUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
 
@@ -193,8 +210,9 @@ router.get('/', async (req, res) => {
 
     const tasks = remainingIds.map(productId =>
       limit(async () => {
+        let stockCode = '';
         try {
-          const htmlUrl = `https://www.elektrofors.com/index.php?route=journal3/product&product_id=${productId}&popup=quickview`;
+          const htmlUrl = `https://www.elektrofors.com/index.php?route=journal3/product&product_id=${productId}`;
 
           const html = await retryWithDelay(() =>
             axios.get(htmlUrl, {
@@ -207,8 +225,7 @@ router.get('/', async (req, res) => {
           if (!title) throw new Error('Invalid product page');
 
           const brand = $('.product-manufacturer a').text().trim();
-          const image = $('.product-image img').first().attr('src') || '';
-          const url = $('a.btn-more-details').attr('href') || '';
+          stockCode = $('.product-model span').text().trim();
 
           const priceData = await priceLimit(() =>
             retryWithDelay(() =>
@@ -220,21 +237,22 @@ router.get('/', async (req, res) => {
             )
           );
 
-          const rawPrice = priceData?.data?.response?.price || '';
-          const price = parseFloat(rawPrice.replace(/[^\d.,]/g, '').replace('.', '').replace(',', '.'));
+          const rawTax = priceData?.data?.response?.tax || '';
+          const cleanedTax = rawTax
+            .replace('KDV Hariç:', '')
+            .replace('TL', '')
+            .trim();
+
+          const price = parseFloat(cleanedTax.replace(/[^\d,]/g, '').replace(',', '.'));
           const stock = priceData?.data?.response?.stock || '';
-          const quantity = priceData?.data?.response?.quantity || '';
 
           const product = {
-            productId,
+            productId: productId.toString(),
+            stockCode,
             name: title,
             brand,
-            price: isNaN(price) ? '' : price,
             stock,
-            quantity,
-            url,
-            image,
-            status: 'ok'
+            price: isNaN(price) ? '' : price
           };
 
           await appendToLocalCSV(product);
@@ -242,15 +260,12 @@ router.get('/', async (req, res) => {
         } catch (err) {
           logFailure(productId, err);
           const fallback = {
-            productId,
+            productId: productId.toString(),
+            stockCode,
             name: '',
             brand: '',
-            price: '',
             stock: '',
-            quantity: '',
-            url: '',
-            image: '',
-            status: 'failed'
+            price: ''
           };
           await appendToLocalCSV(fallback);
         } finally {
@@ -264,11 +279,36 @@ router.get('/', async (req, res) => {
 
     await flushLocalFileToDrive(); // final sync
 
+    const rows = parseCSV(LOCAL_CSV_PATH);
+    console.log(`📊 Updating Google Sheet "${SHEET_NAME}" with ${rows.length} rows...`);
+
+    try {
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId: SHEET_ID,
+        range: `${SHEET_NAME}!A1:Z1000`
+      });
+      console.log('🧹 Cleared existing sheet data.');
+    } catch (err) {
+      if (err.code === 400) {
+        console.warn(`⚠️ Sheet may be non-native XLSX. Skipping clear step: ${err.message}`);
+      } else {
+        throw err;
+      }
+    }
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: rows }
+    });
+
+    console.log(`✅ Google Sheet "${SHEET_NAME}" updated successfully.`);
+
     res.json({ status: 'done', total, scraped: successCount, driveFileId });
   } catch (err) {
     console.error('❌ Scraping failed:', err);
 
-    // Retry logic
     if (process.env.ALLOW_SELF_RECALL === 'true') {
       console.log('↩️ Retrying by calling self...');
       try {
@@ -281,6 +321,5 @@ router.get('/', async (req, res) => {
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
-
 
 module.exports = router;

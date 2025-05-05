@@ -13,7 +13,7 @@ const router = express.Router();
 // Google Drive / Sheets config
 const DRIVE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
 const SHEET_ID = '1lVDDt_mZjuld5Y7QIO9F-4bh9h2fimXGllX5RmOfA8w';
-const SHEET_NAME = 'agorepay';
+const SHEET_NAME = 'agonepay';
 
 const auth = new GoogleAuth({
   scopes: [
@@ -26,34 +26,21 @@ const auth = new GoogleAuth({
 });
 const drive = google.drive({ version: 'v3', auth });
 const sheets = google.sheets({ version: 'v4', auth });
-const csvHeaders = [
-  'name',
-  'url',
-  'stockCode',
-  'productId',
-  'stock',
-  'quantity',
-  'price'
-];
 
-
+// ✅ productId added as first column
+const csvHeaders = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price'];
 
 const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'agonepay-products.csv');
 let driveFileId = null;
 let isFirstWrite = !fs.existsSync(LOCAL_CSV_PATH);
 const existingProductIds = new Set();
 
-// Helpers
 function csvRow(product) {
-  return csvHeaders.map(key =>
-    `"${(product[key] || '')
-      .toString()
-      .replace(/"/g, '""')
-      .replace(/\r?\n|\r/g, ' ') // strip line breaks
-    }"`
-  ).join(',') + '\n';
+  return csvHeaders.map(key => {
+    const value = (product[key] || '').toString().replace(/"/g, '""');
+    return `"${value}"`;
+  }).join(',') + '\n';
 }
-
 
 async function appendToLocalCSV(product) {
   const row = isFirstWrite ? csvHeaders.join(',') + '\n' + csvRow(product) : csvRow(product);
@@ -131,7 +118,7 @@ async function loadExistingDriveProductIds() {
       driveFileId = file.id;
       const content = await downloadDriveFile(file.id);
       content.split('\n').slice(1).forEach(line => {
-        const id = line.split(',')[5]?.replace(/"/g, '');
+        const id = line.split(',')[0]?.replace(/"/g, '');
         if (id) existingProductIds.add(id);
       });
       console.log(`📄 Loaded ${existingProductIds.size} existing product IDs from Drive`);
@@ -141,15 +128,14 @@ async function loadExistingDriveProductIds() {
 
 function parseCSV(filepath) {
   const content = fs.readFileSync(filepath, 'utf8');
-  const rows = content.trim().split('\n').map(line => {
-    return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell =>
+  const rows = content.trim().split('\n').map(line =>
+    line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell =>
       cell.replace(/^"|"$/g, '').replace(/""/g, '"')
-    );
-  });
+    )
+  );
   return rows;
 }
 
-// Main Route
 router.get('/', async (req, res) => {
   await loadExistingDriveProductIds();
 
@@ -187,12 +173,11 @@ router.get('/', async (req, res) => {
         });
         const json = await response.json();
         return {
-          stock: json?.response?.stock || null,
-          quantity: json?.response?.quantity || null,
+          stock: json?.response?.quantity || null,
           price: json?.response?.price || null
         };
       } catch (e) {
-        return { stock: null, quantity: null, price: null };
+        return { stock: null, price: null };
       }
     }, productId);
   };
@@ -211,13 +196,11 @@ router.get('/', async (req, res) => {
         return Array.from(items).map(el => {
           return {
             name: el.querySelector('.name a')?.innerText.trim() || '',
-            url: el.querySelector('.name a')?.href || '',
+            brand: '-',
             stockCode: el.querySelector('.stat-2 span:nth-child(2)')?.innerText.trim() || '',
             productId: el.querySelector('input[name="product_id"]')?.value || null
           };
         });
-        
-        
       });
 
       const newProducts = pageProducts.filter(p => p.productId && !existingProductIds.has(p.productId));
@@ -232,12 +215,11 @@ router.get('/', async (req, res) => {
           batch.map(p =>
             getStockData(page, p.productId).then(stockData => {
               p.stock = stockData.stock;
-              p.quantity = stockData.quantity;
               const rawPrice = stockData.price || '';
               const numericPrice = parseFloat(
                 rawPrice.replace(/[^\d.,]/g, '').replace('.', '').replace(',', '.')
               );
-              p.price = isNaN(numericPrice) ? null : numericPrice;
+              p.price = isNaN(numericPrice) ? '' : numericPrice;
             })
           )
         );
@@ -245,13 +227,19 @@ router.get('/', async (req, res) => {
       }
 
       for (const product of newProducts) {
-        await appendToLocalCSV(product);
+        await appendToLocalCSV({
+          productId: product.productId,
+          stockCode: product.stockCode,
+          name: product.name,
+          brand: product.brand,
+          stock: product.stock,
+          price: product.price
+        });
         existingProductIds.add(product.productId);
       }
 
       products.push(...newProducts);
       console.log(`→ Done with page ${currentPage}, saved ${newProducts.length} new products.`);
-
       currentPage++;
     }
 
@@ -261,7 +249,6 @@ router.get('/', async (req, res) => {
     const rows = parseCSV(LOCAL_CSV_PATH);
     console.log(`📊 Updating Google Sheet "${SHEET_NAME}" with ${rows.length} rows...`);
 
-    // Try clearing sheet content (only supported on native Google Sheets)
     try {
       await sheets.spreadsheets.values.clear({
         spreadsheetId: SHEET_ID,
@@ -276,7 +263,6 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // Write new values
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: `${SHEET_NAME}!A1`,
