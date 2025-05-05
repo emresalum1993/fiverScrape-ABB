@@ -26,7 +26,7 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--set-env-vars'
-      - 'NODE_ENV=production'
+      - 'NODE_ENV=production,ALLOW_SELF_RECALL=true'
 
 options:
   logging: CLOUD_LOGGING_ONLY

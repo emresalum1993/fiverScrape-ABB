@@ -1,5 +1,7 @@
 const express = require('express');
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { parseStringPromise } = require('xml2js');
@@ -8,95 +10,125 @@ const cliProgress = require('cli-progress');
 const { google } = require('googleapis');
 const { GoogleAuth } = require('google-auth-library');
 
-const stream = require('stream');
+require('dotenv').config();
 
 const router = express.Router();
-require('dotenv').config();
 
 const CONCURRENCY = 80;
 const PRICE_CONCURRENCY = 10;
 const MAX_RETRIES = 3;
+const FLUSH_INTERVAL_ROWS = 500;
 const HEADERS = ['productId', 'name', 'brand', 'price', 'stock', 'quantity', 'url', 'image', 'status'];
 
-const drive = google.drive({ version: 'v3' });
+const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'elektrofors-products.csv');
+const DRIVE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
+
 const auth = new GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/drive.file'],
   ...(process.env.NODE_ENV === 'local' && {
     keyFile: path.join(__dirname, '../credentials/deli-df508-036d92c21c6b.json')
   })
 });
-google.options({ auth });
+const drive = google.drive({ version: 'v3', auth });
 
 let driveFileId = null;
-let bufferData = '';
-let isFirstWrite = true;
-async function createDriveFile() {
-  const folderId = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD'; // 👈 your folder ID
+let isFirstWrite = !fs.existsSync(LOCAL_CSV_PATH);
+let rowCountSinceLastFlush = 0;
+const scrapedProductIds = new Set();
 
-  const fileMetadata = {
-    name: 'elektrofors-products.csv',
-    mimeType: 'text/csv',
-    parents: [folderId] // 👈 this places it in the folder
-  };
-
-  const media = {
-    mimeType: 'text/csv',
-    body: stream.Readable.from('')
-  };
-
-  const res = await drive.files.create({
-    resource: fileMetadata,
-    media,
-    fields: 'id'
-  });
-
-  driveFileId = res.data.id;
-  console.log(`📁 Created Google Drive file in folder ${folderId}, ID: ${driveFileId}`);
+// -------- CSV Utilities --------
+function csvRow(product) {
+  return HEADERS.map(key => `"${(product[key] || '').toString().replace(/"/g, '""')}"`).join(',') + '\n';
 }
 
-async function appendToDriveCSV(dataChunk) {
-  bufferData += dataChunk;
+async function appendToLocalCSV(product) {
+  const row = isFirstWrite ? HEADERS.join(',') + '\n' + csvRow(product) : csvRow(product);
+  fs.appendFileSync(LOCAL_CSV_PATH, row);
+  isFirstWrite = false;
+  rowCountSinceLastFlush++;
 
-  if (bufferData.length > 10000) { // Flush every ~10KB
-    await flushToDrive();
+  if (rowCountSinceLastFlush >= FLUSH_INTERVAL_ROWS) {
+    rowCountSinceLastFlush = 0;
+    await flushLocalFileToDrive();
   }
 }
 
-async function flushToDrive() {
-  if (!driveFileId || !bufferData) return;
+async function flushLocalFileToDrive() {
+  if (!fs.existsSync(LOCAL_CSV_PATH)) return;
 
-  const res = await drive.files.get({
-    fileId: driveFileId,
-    alt: 'media'
-  }, { responseType: 'stream' });
-
-  let existingData = '';
-  for await (const chunk of res.data) {
-    existingData += chunk;
+  if (!driveFileId) {
+    const fileMetadata = {
+      name: 'elektrofors-products.csv',
+      parents: [DRIVE_FOLDER_ID],
+      mimeType: 'text/csv'
+    };
+    const media = {
+      mimeType: 'text/csv',
+      body: fs.createReadStream(LOCAL_CSV_PATH)
+    };
+    const res = await drive.files.create({
+      resource: fileMetadata,
+      media,
+      fields: 'id'
+    });
+    driveFileId = res.data.id;
+    console.log(`📁 Created new Drive file with ID: ${driveFileId}`);
+    return;
   }
-
-  const combined = existingData + bufferData;
-  bufferData = '';
 
   const media = {
     mimeType: 'text/csv',
-    body: stream.Readable.from(combined)
+    body: fs.createReadStream(LOCAL_CSV_PATH)
   };
 
   await drive.files.update({
     fileId: driveFileId,
     media
   });
+
+  console.log('☁️ Synced local file to Google Drive');
 }
 
-function csvRow(product) {
-  return HEADERS.map(key => `"${(product[key] || '').toString().replace(/"/g, '""')}"`).join(',') + '\n';
+async function downloadDriveFile(fileId) {
+  const res = await drive.files.get(
+    { fileId, alt: 'media' },
+    { responseType: 'stream' }
+  );
+
+  let data = '';
+  for await (const chunk of res.data) {
+    data += chunk;
+  }
+  return data;
 }
 
-async function appendToCSV(product) {
-  const row = isFirstWrite ? HEADERS.join(',') + '\n' + csvRow(product) : csvRow(product);
-  isFirstWrite = false;
-  await appendToDriveCSV(row);
+async function prepareDriveFileAndLoadExistingIds() {
+  const query = `'${DRIVE_FOLDER_ID}' in parents and name='elektrofors-products.csv' and trashed=false`;
+  const res = await drive.files.list({
+    q: query,
+    fields: 'files(id, modifiedTime)',
+    spaces: 'drive'
+  });
+
+  const file = res.data.files[0];
+  if (file) {
+    const modifiedTime = new Date(file.modifiedTime);
+    const age = Date.now() - modifiedTime.getTime();
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
+
+    if (age > oneWeek) {
+      await drive.files.delete({ fileId: file.id });
+      console.log('🗑️ Old Drive file deleted (older than 7 days)');
+    } else {
+      driveFileId = file.id;
+      const content = await downloadDriveFile(file.id);
+      content.split('\n').slice(1).forEach(line => {
+        const id = line.split(',')[0]?.replace(/"/g, '');
+        if (id) scrapedProductIds.add(id);
+      });
+      console.log(`📄 Loaded ${scrapedProductIds.size} existing product IDs from Drive`);
+    }
+  }
 }
 
 function logFailure(productId, error) {
@@ -139,15 +171,19 @@ async function getTotalEstimatedProducts() {
 
 const priceLimit = pLimit(PRICE_CONCURRENCY);
 
-// -------- Main Route --------
+
+
 router.get('/', async (req, res) => {
+  const routeUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
+
   try {
-    await createDriveFile();
+    await prepareDriveFileAndLoadExistingIds();
 
     const total = await getTotalEstimatedProducts();
-    const remainingIds = Array.from({ length: total }, (_, i) => i + 1);
+    const remainingIds = Array.from({ length: total }, (_, i) => i + 1)
+      .filter(id => !scrapedProductIds.has(id.toString()));
 
-    console.log(`🧮 Total estimated: ${total}`);
+    console.log(`🧮 Total estimated: ${total}, Skipping ${scrapedProductIds.size}, Scraping ${remainingIds.length}`);
 
     const limit = pLimit(CONCURRENCY);
     const progress = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
@@ -201,7 +237,7 @@ router.get('/', async (req, res) => {
             status: 'ok'
           };
 
-          await appendToCSV(product);
+          await appendToLocalCSV(product);
           successCount++;
         } catch (err) {
           logFailure(productId, err);
@@ -216,23 +252,35 @@ router.get('/', async (req, res) => {
             image: '',
             status: 'failed'
           };
-          await appendToCSV(fallback);
+          await appendToLocalCSV(fallback);
         } finally {
           progress.increment();
         }
       })
     );
 
-    
     await Promise.all(tasks);
     progress.stop();
-    await flushToDrive();
+
+    await flushLocalFileToDrive(); // final sync
 
     res.json({ status: 'done', total, scraped: successCount, driveFileId });
   } catch (err) {
     console.error('❌ Scraping failed:', err);
+
+    // Retry logic
+    if (process.env.ALLOW_SELF_RECALL === 'true') {
+      console.log('↩️ Retrying by calling self...');
+      try {
+        await axios.get(routeUrl);
+      } catch (retryErr) {
+        console.error('🛑 Self-recall failed:', retryErr.message);
+      }
+    }
+
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
+
 
 module.exports = router;
