@@ -40,12 +40,22 @@ async function downloadDriveFile(fileId) {
   return data;
 }
 
+function cleanCellValue(value) {
+  if (!value) return '';
+  // Remove any BOM characters and trim
+  return value.toString()
+    .replace(/^\uFEFF/, '') // Remove BOM
+    .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+    .replace(/\r?\n|\r/g, ' ') // Replace newlines with space
+    .trim();
+}
+
 function parseCSV(content) {
-  const rows = content.trim().split('\n').map(line =>
-    line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell =>
-      cell.replace(/^"|"$/g, '').replace(/""/g, '"')
-    )
-  );
+  const rows = content.trim().split('\n').map(line => {
+    // Split by comma but not within quotes
+    const cells = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cleanCellValue(cell));
+    return cells;
+  });
   return rows;
 }
 
@@ -59,6 +69,27 @@ function normalizeStockValue(stock) {
 function getSourceName(fileName) {
   // Remove .csv extension and -products suffix
   return fileName.replace('.csv', '').replace('-products', '');
+}
+
+function isValidRow(row) {
+  // Check if row has enough columns and required fields are not empty
+  if (!row || row.length < 7) return false;
+  
+  const [productId, stockCode, name, brand, stock, price, currency] = row;
+  
+  // Basic validation
+  if (!productId || !stockCode) return false;
+  
+  // Clean up the row
+  row[0] = cleanCellValue(productId); // PRODUCT ID
+  row[1] = cleanCellValue(stockCode); // STOCK CODE
+  row[2] = cleanCellValue(name); // PART DETAILS
+  row[3] = cleanCellValue(brand); // BRAND
+  row[4] = normalizeStockValue(stock); // STOCK
+  row[5] = cleanCellValue(price); // PRICE
+  row[6] = cleanCellValue(currency); // CURRENCY
+  
+  return true;
 }
 
 async function deleteExistingFile(folderId, fileName) {
@@ -145,14 +176,20 @@ router.get('/merge', async (req, res) => {
         rows[0].push('Source');
       }
       
-      // Add source name to each row
+      // Add source name to each row and validate
       const sourceName = getSourceName(file.name);
-      for (let i = 1; i < rows.length; i++) {
-        rows[i].push(sourceName);
-      }
+      const validRows = rows.filter((row, index) => {
+        if (index === 0) return true; // Keep header
+        if (!isValidRow(row)) {
+          console.log(`⚠️ Skipping invalid row in ${file.name}:`, row);
+          return false;
+        }
+        row.push(sourceName);
+        return true;
+      });
       
       // Skip header row for all files except the first one
-      allRows.push(...(allRows.length === 0 ? rows : rows.slice(1)));
+      allRows.push(...(allRows.length === 0 ? validRows : validRows.slice(1)));
     }
 
     // Create a map to store unique rows based on STOCK CODE
@@ -163,15 +200,11 @@ router.get('/merge', async (req, res) => {
     for (let i = 1; i < allRows.length; i++) {
       const row = allRows[i];
       const stockCode = row[1]; // STOCK CODE is the second column
-      const price = parseFloat(row[5]); // PRICE is the sixth column
-      const stock = normalizeStockValue(row[4]); // STOCK is the fifth column
+      const price = parseFloat(row[5]) || 0; // PRICE is the sixth column
 
       if (!stockCode) continue;
 
-      // Update the stock value in the row
-      row[4] = stock;
-
-      if (!uniqueRows.has(stockCode) || price < parseFloat(uniqueRows.get(stockCode)[5])) {
+      if (!uniqueRows.has(stockCode) || price < parseFloat(uniqueRows.get(stockCode)[5] || 0)) {
         uniqueRows.set(stockCode, row);
       }
     }

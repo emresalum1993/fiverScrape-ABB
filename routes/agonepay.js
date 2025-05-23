@@ -228,7 +228,7 @@ router.get('/', async (req, res) => {
           name: p.name,
           brand: meta.brand || '--',
           category: meta.category || '',
-          price: isNaN(numericPrice) ? '' : numericPrice,
+          price: isNaN(numericPrice) ? '' : numericPrice / 100,
           stock: null, // will be updated below,
         currency: meta.currency || ''
         };
