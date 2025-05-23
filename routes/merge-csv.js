@@ -12,6 +12,7 @@ const router = express.Router();
 
 const SOURCE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
 const OUTPUT_FOLDER_ID = '1Y3O6OxdS1yMvCTZKJQ-UfmRPjHcJQyr5';
+const MERGED_FILE_NAME = 'Product List.xlsx';
 
 const auth = new GoogleAuth({
   scopes: [
@@ -46,6 +47,36 @@ function parseCSV(content) {
     )
   );
   return rows;
+}
+
+function normalizeStockValue(stock) {
+  if (!stock || stock === 'null' || stock === 'Stokta yok' || stock === '') {
+    return '0';
+  }
+  return stock;
+}
+
+async function deleteExistingFile(folderId, fileName) {
+  try {
+    // Search for the file in the specified folder
+    const query = `'${folderId}' in parents and name='${fileName}' and trashed=false`;
+    const files = await drive.files.list({
+      q: query,
+      fields: 'files(id)',
+      spaces: 'drive'
+    });
+
+    // If file exists, delete it
+    if (files.data.files.length > 0) {
+      for (const file of files.data.files) {
+        await drive.files.delete({ fileId: file.id });
+        console.log(`🗑️ Deleted existing file: ${fileName}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error deleting existing file:', error);
+    throw error;
+  }
 }
 
 router.get('/merge', async (req, res) => {
@@ -116,8 +147,12 @@ router.get('/merge', async (req, res) => {
       const row = allRows[i];
       const stockCode = row[1]; // STOCK CODE is the second column
       const price = parseFloat(row[5]); // PRICE is the sixth column
+      const stock = normalizeStockValue(row[4]); // STOCK is the fifth column
 
       if (!stockCode) continue;
+
+      // Update the stock value in the row
+      row[4] = stock;
 
       if (!uniqueRows.has(stockCode) || price < parseFloat(uniqueRows.get(stockCode)[5])) {
         uniqueRows.set(stockCode, row);
@@ -136,9 +171,12 @@ router.get('/merge', async (req, res) => {
     const tempXlsxPath = path.join(os.tmpdir(), 'merged-products.xlsx');
     XLSX.writeFile(wb, tempXlsxPath);
 
+    // Delete existing file if it exists
+    await deleteExistingFile(OUTPUT_FOLDER_ID, MERGED_FILE_NAME);
+
     // Create the file metadata
     const fileMetadata = {
-      name: 'merged-products.xlsx',
+      name: MERGED_FILE_NAME,
       parents: [OUTPUT_FOLDER_ID]
     };
 
@@ -187,6 +225,9 @@ router.get('/merge', async (req, res) => {
           });
 
           console.log('✅ Created output folder:', folder.data.id);
+
+          // Delete existing file in the new folder if it exists
+          await deleteExistingFile(folder.data.id, MERGED_FILE_NAME);
 
           // Try uploading again with the new folder ID
           fileMetadata.parents = [folder.data.id];
