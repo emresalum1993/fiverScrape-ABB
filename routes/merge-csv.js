@@ -56,6 +56,11 @@ function normalizeStockValue(stock) {
   return stock;
 }
 
+function getSourceName(fileName) {
+  // Remove .csv extension and -products suffix
+  return fileName.replace('.csv', '').replace('-products', '');
+}
+
 async function deleteExistingFile(folderId, fileName) {
   try {
     // Search for the file in the specified folder
@@ -134,6 +139,18 @@ router.get('/merge', async (req, res) => {
       const content = await downloadDriveFile(file.id);
       const rows = parseCSV(content);
       console.log(`📊 File ${file.name} has ${rows.length} rows`);
+      
+      // Add source column to header if it's the first file
+      if (allRows.length === 0) {
+        rows[0].push('Source');
+      }
+      
+      // Add source name to each row
+      const sourceName = getSourceName(file.name);
+      for (let i = 1; i < rows.length; i++) {
+        rows[i].push(sourceName);
+      }
+      
       // Skip header row for all files except the first one
       allRows.push(...(allRows.length === 0 ? rows : rows.slice(1)));
     }
