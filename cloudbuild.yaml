@@ -3,14 +3,14 @@ steps:
     args: [
       'build', 
       '-t', 
-      'europe-west1-docker.pkg.dev/deli-df508/scraper-images/fiverrr-scrape-abb', 
+      'europe-west1-docker.pkg.dev/weekly-stock-price-dashboard/scraper-images/fiverrr-scrape-abb', 
       '.'
     ]
 
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'push', 
-      'europe-west1-docker.pkg.dev/deli-df508/scraper-images/fiverrr-scrape-abb'
+      'europe-west1-docker.pkg.dev/weekly-stock-price-dashboard/scraper-images/fiverrr-scrape-abb'
     ]
 
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -19,7 +19,7 @@ steps:
       - 'deploy'
       - 'fiverrr-scrape-abb'
       - '--image'
-      - 'europe-west1-docker.pkg.dev/deli-df508/scraper-images/fiverrr-scrape-abb'
+      - 'europe-west1-docker.pkg.dev/weekly-stock-price-dashboard/scraper-images/fiverrr-scrape-abb'
       - '--region'
       - 'europe-west1'
       - '--platform'

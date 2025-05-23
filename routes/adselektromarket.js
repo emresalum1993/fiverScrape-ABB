@@ -21,13 +21,14 @@ const auth = new GoogleAuth({
     'https://www.googleapis.com/auth/spreadsheets'
   ],
   ...(process.env.NODE_ENV === 'local' && {
-    keyFile: path.join(__dirname, '../credentials/deli-df508-036d92c21c6b.json')
+    keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
   })
 });
 const drive = google.drive({ version: 'v3', auth });
 const sheets = google.sheets({ version: 'v4', auth });
 
-const HEADERS = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price'];
+const HEADERS = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price', 'currencyCode'];
+const HEADERSSpeaking = ['productId', 'STOCK CODE', 'PART DETAILS', 'BRAND', 'STOCK', 'PRICE', 'CURRENCY'];
 const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'adselektromarket-products.csv');
 let driveFileId = null;
 let isFirstWrite = !fs.existsSync(LOCAL_CSV_PATH);
@@ -40,7 +41,7 @@ function csvRow(product) {
 }
 
 async function appendToLocalCSV(product) {
-  const row = isFirstWrite ? HEADERS.join(',') + '\n' + csvRow(product) : csvRow(product);
+  const row = isFirstWrite ? HEADERSSpeaking.join(',') + '\n' + csvRow(product) : csvRow(product);
   fs.appendFileSync(LOCAL_CSV_PATH, row);
   isFirstWrite = false;
 }
@@ -173,9 +174,10 @@ router.get('/', async (req, res) => {
 
         return {
           productId: p.id || '',
-          stockCode: p.code || '',
+          stockCode: p.supplier_code || '',
           name: p.name || '',
           brand: p.brand || '',
+          currencyCode: p.currency_target || '',
           stock: p.quantity || 0,
           price: isNaN(priceWithoutVat) ? '' : parseFloat(priceWithoutVat.toFixed(2))
         };
@@ -226,6 +228,8 @@ router.get('/', async (req, res) => {
   await flushToDrive();
 
   const rows = parseCSV(LOCAL_CSV_PATH);
+  const sheetRows = rows.map(row => row.slice(1)); // removes the first column (productId)
+
   console.log(`📊 Updating Google Sheet "${SHEET_NAME}" with ${rows.length} rows...`);
 
   try {
@@ -246,7 +250,7 @@ router.get('/', async (req, res) => {
     spreadsheetId: SHEET_ID,
     range: `${SHEET_NAME}!A1`,
     valueInputOption: 'RAW',
-    requestBody: { values: rows }
+    requestBody: { values: sheetRows }
   });
 
   console.log(`✅ Google Sheet "${SHEET_NAME}" updated successfully.`);

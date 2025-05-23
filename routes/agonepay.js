@@ -21,14 +21,17 @@ const auth = new GoogleAuth({
     'https://www.googleapis.com/auth/spreadsheets'
   ],
   ...(process.env.NODE_ENV === 'local' && {
-    keyFile: path.join(__dirname, '../credentials/deli-df508-036d92c21c6b.json')
+    keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
   })
 });
 const drive = google.drive({ version: 'v3', auth });
 const sheets = google.sheets({ version: 'v4', auth });
 
 // ✅ productId added as first column
-const csvHeaders = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price'];
+const csvHeaders = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price','currency'];
+
+const csvHeadersSpeaking = ['PRODUCT ID', 'STOCK CODE', 'PART DETAILS', 'BRAND', 'STOCK', 'PRICE','CURRENCY'];
+
 
 const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'agonepay-products.csv');
 let driveFileId = null;
@@ -43,7 +46,7 @@ function csvRow(product) {
 }
 
 async function appendToLocalCSV(product) {
-  const row = isFirstWrite ? csvHeaders.join(',') + '\n' + csvRow(product) : csvRow(product);
+  const row = isFirstWrite ? csvHeadersSpeaking.join(',') + '\n' + csvRow(product) : csvRow(product);
   fs.appendFileSync(LOCAL_CSV_PATH, row);
   isFirstWrite = false;
 }
@@ -181,74 +184,104 @@ router.get('/', async (req, res) => {
       }
     }, productId);
   };
+ 
 
   try {
     while (true) {
-      const url = `https://agonepay.com/index.php?route=product/search&search=&description=true&limit=500&page=${currentPage}`;
+      const url = `https://agonepay.com/index.php?route=product/search&search=&description=true&limit=70&page=${currentPage}`;
       console.log(`Scraping page ${currentPage}: ${url}`);
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
+  
       const hasProducts = await page.$('.main-products .product-layout');
       if (!hasProducts) break;
-
-      const pageProducts = await page.evaluate(() => {
+  
+      // Step 1: Get productId, name, stockCode
+      const rawProducts = await page.evaluate(() => {
         const items = document.querySelectorAll('.product-thumb');
         return Array.from(items).map(el => {
           return {
-            name: el.querySelector('.name a')?.innerText.trim() || '',
-            brand: '-',
+            name: el.querySelector('.description')?.innerText.trim() || '',
             stockCode: el.querySelector('.stat-2 span:nth-child(2)')?.innerText.trim() || '',
+         //   partDetails: el.querySelector('.description')?.innerText.trim() || '',
             productId: el.querySelector('input[name="product_id"]')?.value || null
           };
         });
       });
+  
+      const productIds = rawProducts.map(p => p.productId).filter(Boolean);
+  
+      // Step 2: Pull full metadata from dataLayer
+      const metadataMap = await getProductMetadataFromDataLayer(page, productIds);
+  
+      // Step 3: Merge metadata into products
+      const pageProducts = rawProducts.map(p => {
+        const meta = metadataMap[p.productId] || {};
 
+
+        const rawPrice = meta.price || '';
+        const numericPrice = parseFloat(
+          rawPrice.replace(/[^\d.,]/g, '').replace('.', '').replace(',', '.')
+        );
+        return {
+          productId: p.productId,
+          stockCode: p.stockCode,
+          name: p.name,
+          brand: meta.brand || '--',
+          category: meta.category || '',
+          price: isNaN(numericPrice) ? '' : numericPrice,
+          stock: null, // will be updated below,
+        currency: meta.currency || ''
+        };
+      });
+  
       const newProducts = pageProducts.filter(p => p.productId && !existingProductIds.has(p.productId));
       console.log(`⏩ Skipping ${pageProducts.length - newProducts.length} already scraped products.`);
-
+  
       const concurrencyLimit = 30;
       let i = 0;
-
+  
       while (i < newProducts.length) {
         const batch = newProducts.slice(i, i + concurrencyLimit);
         await Promise.all(
           batch.map(p =>
             getStockData(page, p.productId).then(stockData => {
               p.stock = stockData.stock;
-              const rawPrice = stockData.price || '';
-              const numericPrice = parseFloat(
-                rawPrice.replace(/[^\d.,]/g, '').replace('.', '').replace(',', '.')
-              );
-              p.price = isNaN(numericPrice) ? '' : numericPrice;
             })
           )
         );
         i += concurrencyLimit;
       }
-
+  
       for (const product of newProducts) {
-        await appendToLocalCSV({
+        const obj ={
           productId: product.productId,
           stockCode: product.stockCode,
           name: product.name,
           brand: product.brand,
           stock: product.stock,
-          price: product.price
-        });
+          price: product.price,
+          currency: product.currency
+        }
+        await appendToLocalCSV(obj);
+
+        console.log(obj)
+        
         existingProductIds.add(product.productId);
       }
-
+  
       products.push(...newProducts);
       console.log(`→ Done with page ${currentPage}, saved ${newProducts.length} new products.`);
       currentPage++;
     }
-
+  
     await browser.close();
     await flushToDrive();
-
+  
     const rows = parseCSV(LOCAL_CSV_PATH);
-    console.log(`📊 Updating Google Sheet "${SHEET_NAME}" with ${rows.length} rows...`);
+    const sheetRows = rows.map(row => row.slice(1)); // removes the first column (productId)
 
+    console.log(`📊 Updating Google Sheet "${SHEET_NAME}" with ${rows.length} rows...`);
+  
     try {
       await sheets.spreadsheets.values.clear({
         spreadsheetId: SHEET_ID,
@@ -262,22 +295,120 @@ router.get('/', async (req, res) => {
         throw err;
       }
     }
+  
 
+    console.log(rows)
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: `${SHEET_NAME}!A1`,
       valueInputOption: 'RAW',
-      requestBody: { values: rows }
+      requestBody: { values: sheetRows }
     });
-
+  
     console.log(`✅ Google Sheet "${SHEET_NAME}" updated successfully.`);
     res.json({ total: products.length, driveFileId });
-
+  
   } catch (err) {
     await browser.close();
     console.error('❌ Scraping failed:', err);
     res.status(500).send('Scraping failed.');
   }
+
+  
+
+  
+  
 });
 
+async function getBrandsFromE4Logs(page, productIds) {
+  const brands = {};
+  const expectedCount = productIds.length;
+  let seenCount = 0;
+
+  const handleLog = msg => {
+    const text = msg.text();
+    if (text.includes('item_brand:')) {
+      const idMatch = text.match(/item_id:\s*(\d+)/);
+      const brandMatch = text.match(/item_brand:\s*([^/]+?)\s*(?:\/|$)/);
+
+      if (idMatch && brandMatch) {
+        const id = idMatch[1];
+        const brand = brandMatch[1].trim();
+        brands[id] = brand;
+        seenCount++;
+      }
+    }
+  };
+
+  page.on('console', handleLog);
+
+  // Trigger all brand logging
+  await page.evaluate((ids) => {
+    ids.forEach(id => {
+      try {
+        window.e4_item?.select?.(id, 'search');
+      } catch (e) {}
+    });
+  }, productIds);
+
+  // Wait until most logs are likely flushed or timeout
+  const timeout = 2000; // max 2s
+  const interval = 100;
+  let waited = 0;
+
+  while (waited < timeout && seenCount < expectedCount) {
+    await new Promise(resolve => setTimeout(resolve, interval));
+    waited += interval;
+  }
+
+  page.off('console', handleLog);
+  return brands;
+}
+
+async function getProductMetadataFromDataLayer(page, productIds) {
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  await page.evaluate((ids) => {
+    ids.forEach((id, index) => {
+      try {
+        window.e4_item.select(id, 'search');
+      } catch (e) {
+        console.log(e)
+      }
+    });
+  }, productIds);
+
+  // Small delay to let dataLayer populate
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // Pull metadata from dataLayer
+  const metadataMap = await page.evaluate(() => {
+    const result = {};
+    const layer = Array.isArray(window.dataLayer) ? window.dataLayer : [];
+
+    layer.forEach(entry => {
+      if (entry.event === 'select_item' && entry.ecommerce?.items) {
+        entry.ecommerce.items.forEach(item => {
+          if (item.item_id) {
+            result[item.item_id] = {
+              brand: item.item_brand || '--',
+            //  name: item.item_name || '',
+              category: item.item_category || '',
+              price: item.price || '',
+                  currency: item.currency || ''
+            };
+          }
+        });
+      }
+    });
+
+    return result;
+  });
+
+  return metadataMap;
+}
+
+
+
+
 module.exports = router;
+

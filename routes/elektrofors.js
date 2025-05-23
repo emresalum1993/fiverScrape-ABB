@@ -20,8 +20,8 @@ const MAX_RETRIES = 3;
 const FLUSH_INTERVAL_ROWS = 500;
 
 // ✅ Use productId as first column
-const HEADERS = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price'];
-
+const HEADERS = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price', 'currency'];
+const HEADERSSpeaking = ['PRODUCT ID', 'STOCK CODE', 'PART DETAILS', 'BRAND', 'STOCK', 'PRICE', 'CURRENCY'];
 const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'elektrofors-products.csv');
 const DRIVE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
 
@@ -31,7 +31,7 @@ const auth = new GoogleAuth({
     'https://www.googleapis.com/auth/spreadsheets'
   ],
   ...(process.env.NODE_ENV === 'local' && {
-    keyFile: path.join(__dirname, '../credentials/deli-df508-036d92c21c6b.json')
+    keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
   })
 });
 const drive = google.drive({ version: 'v3', auth });
@@ -52,7 +52,7 @@ function csvRow(product) {
 }
 
 async function appendToLocalCSV(product) {
-  const row = isFirstWrite ? HEADERS.join(',') + '\n' + csvRow(product) : csvRow(product);
+  const row = isFirstWrite ? HEADERSSpeaking.join(',') + '\n' + csvRow(product) : csvRow(product);
   fs.appendFileSync(LOCAL_CSV_PATH, row);
   isFirstWrite = false;
   rowCountSinceLastFlush++;
@@ -252,7 +252,8 @@ router.get('/', async (req, res) => {
             name: title,
             brand,
             stock,
-            price: isNaN(price) ? '' : price
+            price: isNaN(price) ? '' : price,
+            currency : 'TL'
           };
 
           await appendToLocalCSV(product);
@@ -279,7 +280,10 @@ router.get('/', async (req, res) => {
 
     await flushLocalFileToDrive(); // final sync
 
+    
     const rows = parseCSV(LOCAL_CSV_PATH);
+    const sheetRows = rows.map(row => row.slice(1)); // removes the first column (productId)
+
     console.log(`📊 Updating Google Sheet "${SHEET_NAME}" with ${rows.length} rows...`);
 
     try {
@@ -300,7 +304,7 @@ router.get('/', async (req, res) => {
       spreadsheetId: SHEET_ID,
       range: `${SHEET_NAME}!A1`,
       valueInputOption: 'RAW',
-      requestBody: { values: rows }
+      requestBody: { values: sheetRows }
     });
 
     console.log(`✅ Google Sheet "${SHEET_NAME}" updated successfully.`);
