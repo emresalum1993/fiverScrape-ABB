@@ -17,15 +17,14 @@ const SHEET_NAME = 'agonepay';
 
 const auth = new GoogleAuth({
   scopes: [
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/spreadsheets'
+    'https://www.googleapis.com/auth/drive.file'
   ],
   ...(process.env.NODE_ENV === 'local' && {
     keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
   })
 });
 const drive = google.drive({ version: 'v3', auth });
-const sheets = google.sheets({ version: 'v4', auth });
+
 
 // ✅ productId added as first column
 const csvHeaders = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price','currency'];

@@ -17,15 +17,14 @@ const SHEET_NAME = 'adselektromarket';
 
 const auth = new GoogleAuth({
   scopes: [
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/spreadsheets'
+    'https://www.googleapis.com/auth/drive.file'
   ],
   ...(process.env.NODE_ENV === 'local' && {
     keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
   })
 });
 const drive = google.drive({ version: 'v3', auth });
-const sheets = google.sheets({ version: 'v4', auth });
+ 
 
 const HEADERS = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price', 'currencyCode'];
 const HEADERSSpeaking = ['productId', 'STOCK CODE', 'PART DETAILS', 'BRAND', 'STOCK', 'PRICE', 'CURRENCY'];
@@ -228,33 +227,7 @@ router.get('/', async (req, res) => {
   await flushToDrive();
 
   const rows = parseCSV(LOCAL_CSV_PATH);
-  const sheetRows = rows.map(row => row.slice(1)); // removes the first column (productId)
-
-  console.log(`📊 Updating Google Sheet "${SHEET_NAME}" with ${rows.length} rows...`);
-
-  try {
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A1:Z1000`
-    });
-    console.log('🧹 Cleared existing sheet data.');
-  } catch (err) {
-    if (err.code === 400) {
-      console.warn(`⚠️ Sheet may be non-native XLSX. Skipping clear step: ${err.message}`);
-    } else {
-      throw err;
-    }
-  }
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID,
-    range: `${SHEET_NAME}!A1`,
-    valueInputOption: 'RAW',
-    requestBody: { values: sheetRows }
-  });
-
-  console.log(`✅ Google Sheet "${SHEET_NAME}" updated successfully.`);
-
+  
   res.json({ status: 'done', total: rows.length, driveFileId });
 });
 
