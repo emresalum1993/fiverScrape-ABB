@@ -23,6 +23,9 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+
+
+
 router.get('/', async (req, res) => {
   let browser, page;
 
@@ -45,74 +48,16 @@ router.get('/', async (req, res) => {
     page = connected.page;
     browser = connected.browser;
 
-    const results = [];
-    const productIds = Array.from({ length: 100 }, (_, i) => i + 1); // Generate array of IDs 1-100
-
-    // Go to home page first
-    await page.goto("https://elektrofors.com", { waitUntil: "domcontentloaded" });
+  
     await delay(2000);
 
-    // Process products sequentially
-    for (const productId of productIds) {
-      try {
-        // Go to product page
-        const productUrl = `https://www.elektrofors.com/index.php?route=journal3/product&product_id=${productId}`;
-        await page.goto(productUrl, { waitUntil: "domcontentloaded" });
-        await delay(2000);
-
-        // Check if product exists
-        const productExists = await page.evaluate(() => {
-          return !document.querySelector('.alert-danger');
-        });
-
-        if (!productExists) {
-          results.push({
-            productId,
-            status: 'not_found'
-          });
-          continue;
-        }
-
-        // Wait for the price element
-        await page.waitForSelector('.product-price', { visible: true, timeout: 5000 }).catch(() => null);
-
-        // Get product data
-        const productData = await page.evaluate(() => {
-          const price = document.querySelector('.product-price')?.textContent.trim() || 'N/A';
-          const title = document.querySelector('h1')?.textContent.trim() || 'N/A';
-          const sku = document.querySelector('.product-sku')?.textContent.trim() || 'N/A';
-          
-          return {
-            price,
-            title,
-            sku
-          };
-        });
-
-        results.push({
-          productId,
-          status: 'success',
-          ...productData
-        });
-
-      } catch (error) {
-        results.push({
-          productId,
-          status: 'error',
-          error: error.message
-        });
-      }
-
-      // Add delay between products to avoid rate limiting
-      await delay(2000);
-    }
+    
 
     await browser.close();
 
     res.json({
       status: 'success',
-      totalProducts: results.length,
-      results
+      
     });
 
   } catch (error) {
@@ -128,6 +73,8 @@ router.get('/', async (req, res) => {
     });
   }
 });
+
+
 
 
 router.get('/2', async (req, res) => {
@@ -240,9 +187,49 @@ router.get('/2', async (req, res) => {
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
-router.get('/stealth', async (req, res) => {
+router.get('/s', async (req, res) => {
+  let baseBrowser;
+
   try {
-    const productIds = Array.from({ length: 20 }, (_, i) => i + 1); // Example range
+    // Step 1: Launch Puppeteer and solve CAPTCHA on homepage
+    baseBrowser = await puppeteer.launch({
+      headless: false,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+ 
+      ],
+    });
+
+    const seedPage = await baseBrowser.newPage();
+     
+    await seedPage.goto('https://www.elektrofors.com', { waitUntil: 'domcontentloaded' });
+
+    const { captchas, solved, error } = await seedPage.solveRecaptchas();
+    await delay(5000); // wait for JS
+    if (error) {
+      console.warn('⚠️ CAPTCHA solving failed:', error.message);
+    } else if (captchas.length > 0 && solved.length > 0) {
+      console.log(`✅ CAPTCHA detected and ${solved.length} solved`);
+    } else if (captchas.length > 0 && solved.length === 0) {
+      console.warn('❌ CAPTCHA detected but none solved');
+    } else {
+      console.log('✅ No CAPTCHA found on the page');
+    }
+    
+  
+    await delay(5000); // wait for JS challenges / redirects to finish
+    console.log('cookies');
+    // Get cookies from authenticated session
+    const cookies = await seedPage.cookies();
+    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+    // Optional: close the seed page but keep browser open
+    await seedPage.close();
+
+    // Step 2: Launch cluster and share session cookies + user agent
+    const productIds = Array.from({ length: 20 }, (_, i) => i + 1);
     const results = [];
 
     const cluster = await Cluster.launch({
@@ -260,25 +247,20 @@ router.get('/stealth', async (req, res) => {
           '--single-process',
           '--disable-software-rasterizer',
           '--disable-features=IsolateOrigins,site-per-process',
-        ]
+        ],
       },
       monitor: false,
     });
 
     await cluster.task(async ({ page, data: productId }) => {
       try {
-        await page.setUserAgent(
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-        );
+        await page.setUserAgent(userAgent);
+        await page.setExtraHTTPHeaders({
+          Cookie: cookieHeader,
+        });
 
         const productUrl = `https://www.elektrofors.com/index.php?route=journal3/product&product_id=${productId}`;
         await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-        // 🧠 Solve CAPTCHAs if present
-        const { solved, error } = await page.solveRecaptchas();
-        if (error) {
-          console.warn(`❌ CAPTCHA solve error for ID ${productId}:`, error.message);
-        }
 
         const productExists = await page.evaluate(() => {
           return !document.querySelector('.alert-danger');
@@ -299,8 +281,7 @@ router.get('/stealth', async (req, res) => {
         });
 
         results.push({ productId, status: 'success', ...productData });
-
-        await delay(1000); // optional throttle
+        await delay(500);
 
       } catch (err) {
         results.push({ productId, status: 'error', error: err.message });
@@ -313,19 +294,17 @@ router.get('/stealth', async (req, res) => {
 
     await cluster.idle();
     await cluster.close();
+    await baseBrowser.close();
 
     res.json({
       status: 'success',
       totalProducts: results.length,
-      results
+      results,
     });
-
   } catch (error) {
-    console.error('❌ Scraping Error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: error.message
-    });
+    console.error('❌ Error:', error);
+    if (baseBrowser) await baseBrowser.close();
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
 
