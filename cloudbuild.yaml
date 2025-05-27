@@ -36,7 +36,8 @@ steps:
       - '--allow-unauthenticated'
       - '--set-env-vars'
       - 'NODE_ENV=production,ALLOW_SELF_RECALL=true'
+      - '--port=8080'  # ✅ explicitly declare expected port (safe but optional)
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8  # Optional: speeds up build for Chromium installs
+  machineType: E2_HIGHCPU_8  # ✅ ensures Chrome + Puppeteer builds are fast/stable
