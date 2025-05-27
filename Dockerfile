@@ -47,16 +47,30 @@ WORKDIR /usr/src/app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies (you can include puppeteer-real-browser here)
+# Install dependencies
 RUN npm install --omit=dev --unsafe-perm=true --allow-root && \
     npm cache clean --force
 
 # Copy application code
 COPY . .
 
-# Expose Cloud Run port
+# Set environment variables
 ENV PORT=8080
+ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
+
+# Expose Cloud Run port
 EXPOSE 8080
 
-# Default command — run app using Xvfb for GUI/browser compatibility
-CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x720x24", "node", "index.js"]
+# Create a non-root user
+RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+    && mkdir -p /home/pptruser/Downloads \
+    && chown -R pptruser:pptruser /home/pptruser \
+    && chown -R pptruser:pptruser /usr/src/app
+
+# Run everything after as non-privileged user
+USER pptruser
+
+# Start the application with Xvfb
+CMD xvfb-run --server-args="-screen 0 1280x720x24" node index.js
