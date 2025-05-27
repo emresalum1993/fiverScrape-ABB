@@ -27,7 +27,7 @@ function delay(ms) {
 
 
 router.get('/', async (req, res) => {
-  let browser, page;
+  let browser2, seedPage;
 
   try {
     // Dynamically import the ESM modules
@@ -45,19 +45,23 @@ router.get('/', async (req, res) => {
       plugins: [clickAndWaitPlugin()],
     });
 
-    page = connected.page;
-    browser = connected.browser;
+    seedPage = connected.page;
+    browser2 = connected.browser;
+ 
+    // Go to home page first
+    await seedPage.goto("https://elektrofors.com", { waitUntil: "domcontentloaded" });
+    await delay(20000);
+ 
+    const cookies = await seedPage.cookies(); // ✅ No URL needed
+    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
-  
+    console.log('cookies', cookies);
+
+    await browser2.close();
     await delay(2000);
-
-    
-
-    await browser.close();
-
     res.json({
       status: 'success',
-      
+    
     });
 
   } catch (error) {
@@ -101,7 +105,7 @@ router.get('/2', async (req, res) => {
     console.log('connected to real browser');
     // Visit homepage to pass Cloudflare
     await page2.goto('https://elektrofors.com', { waitUntil: 'domcontentloaded' });
-    await delay(5000); // give it time to pass Turnstile
+    await delay(20000); // give it time to pass Turnstile
     console.log('cookies');
     const cookies = await page2.cookies();
     const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
