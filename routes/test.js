@@ -4,8 +4,19 @@ const router = express.Router();
 const { Cluster } = require('puppeteer-cluster');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const RecaptchaPlugin = require('puppeteer-extra-plugin-recaptcha');
 
 puppeteer.use(StealthPlugin());
+// Solve captchas using 2Captcha
+puppeteer.use(
+  RecaptchaPlugin({
+    provider: {
+      id: '2captcha',
+      token: 'b218082f5ddea70bdbf8b14af2efec14', // ⬅️ Your API key
+    },
+    visualFeedback: false,
+  })
+);
 
 // Delay helper
 function delay(ms) {
@@ -229,6 +240,93 @@ router.get('/2', async (req, res) => {
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
+router.get('/stealth', async (req, res) => {
+  try {
+    const productIds = Array.from({ length: 20 }, (_, i) => i + 1); // Example range
+    const results = [];
 
+    const cluster = await Cluster.launch({
+      concurrency: Cluster.CONCURRENCY_PAGE,
+      maxConcurrency: 3,
+      puppeteer,
+      timeout: 60000,
+      puppeteerOptions: {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--single-process',
+          '--disable-software-rasterizer',
+          '--disable-features=IsolateOrigins,site-per-process',
+        ]
+      },
+      monitor: false,
+    });
+
+    await cluster.task(async ({ page, data: productId }) => {
+      try {
+        await page.setUserAgent(
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        );
+
+        const productUrl = `https://www.elektrofors.com/index.php?route=journal3/product&product_id=${productId}`;
+        await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+        // 🧠 Solve CAPTCHAs if present
+        const { solved, error } = await page.solveRecaptchas();
+        if (error) {
+          console.warn(`❌ CAPTCHA solve error for ID ${productId}:`, error.message);
+        }
+
+        const productExists = await page.evaluate(() => {
+          return !document.querySelector('.alert-danger');
+        });
+
+        if (!productExists) {
+          results.push({ productId, status: 'not_found' });
+          return;
+        }
+
+        await page.waitForSelector('.product-price', { visible: true, timeout: 5000 }).catch(() => null);
+
+        const productData = await page.evaluate(() => {
+          const price = document.querySelector('.product-price')?.textContent.trim() || 'N/A';
+          const title = document.querySelector('h1')?.textContent.trim() || 'N/A';
+          const sku = document.querySelector('.product-sku')?.textContent.trim() || 'N/A';
+          return { price, title, sku };
+        });
+
+        results.push({ productId, status: 'success', ...productData });
+
+        await delay(1000); // optional throttle
+
+      } catch (err) {
+        results.push({ productId, status: 'error', error: err.message });
+      }
+    });
+
+    for (const id of productIds) {
+      cluster.queue(id);
+    }
+
+    await cluster.idle();
+    await cluster.close();
+
+    res.json({
+      status: 'success',
+      totalProducts: results.length,
+      results
+    });
+
+  } catch (error) {
+    console.error('❌ Scraping Error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+});
 
 module.exports = router;
