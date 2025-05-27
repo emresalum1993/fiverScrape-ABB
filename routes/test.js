@@ -120,13 +120,14 @@ router.get('/', async (req, res) => {
 
 
 router.get('/2', async (req, res) => {
-  let browser, page;
+  let browser2, page2;
 
   try {
     // STEP 1: Bypass Cloudflare via real browser
     const { connect } = await import('puppeteer-real-browser');
     const clickAndWaitPlugin = (await import('puppeteer-extra-plugin-click-and-wait')).default;
 
+    console.log('connecting to real browser');
     const connected = await connect({
       args: ['--start-maximized', '--no-sandbox', '--disable-setuid-sandbox'],
       turnstile: true,
@@ -137,20 +138,21 @@ router.get('/2', async (req, res) => {
       plugins: [clickAndWaitPlugin()],
     });
 
-    page = connected.page;
-    browser = connected.browser;
-
+    page2 = connected.page;
+    browser2 = connected.browser;
+    console.log('connected to real browser');
     // Visit homepage to pass Cloudflare
-    await page.goto('https://elektrofors.com', { waitUntil: 'domcontentloaded' });
+    await page2.goto('https://elektrofors.com', { waitUntil: 'domcontentloaded' });
     await delay(5000); // give it time to pass Turnstile
-
-    const cookies = await page.cookies();
+    console.log('cookies');
+    const cookies = await page2.cookies();
     const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-    const userAgent = await page.evaluate(() => navigator.userAgent);
-
-    await browser.close(); // real browser done
-
+    const userAgent = await page2.evaluate(() => navigator.userAgent);
+    await delay(2000);
+    await browser2.close(); // real browser done
+    console.log('real browser closed');
     // STEP 2: Use cookies in puppeteer-cluster
+    await delay(2000);
     const productIds = Array.from({ length: 20 }, (_, i) => i + 1);
     const results = [];
 
@@ -161,8 +163,14 @@ router.get('/2', async (req, res) => {
       puppeteer,
       timeout: 60000,
       puppeteerOptions: {
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-features=IsolateOrigins,site-per-process'
+        ],
       },
       monitor: false,
     });
