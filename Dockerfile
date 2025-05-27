@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Install system dependencies (required by Puppeteer)
+# Install system dependencies (including Xvfb and Chrome dependencies)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     fonts-liberation \
@@ -29,13 +29,16 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     wget \
     xdg-utils \
-    && rm -rf /var/lib/apt/lists/*
+    xvfb \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome Stable
-RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get update && apt-get install -y ./google-chrome-stable_current_amd64.deb \
-    && rm google-chrome-stable_current_amd64.deb \
-    && rm -rf /var/lib/apt/lists/*
+RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+    apt-get update && \
+    apt-get install -y ./google-chrome-stable_current_amd64.deb && \
+    rm google-chrome-stable_current_amd64.deb && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /usr/src/app
@@ -43,16 +46,16 @@ WORKDIR /usr/src/app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install node dependencies, including Puppeteer (without browser download)
-RUN npm install --production --omit=dev --unsafe-perm=true --allow-root \
-    && npm cache clean --force
+# Install dependencies (you can include puppeteer-real-browser here)
+RUN npm install --omit=dev --unsafe-perm=true --allow-root && \
+    npm cache clean --force
 
-# Copy app code
+# Copy application code
 COPY . .
 
-# Expose the port used by Cloud Run (usually 8080)
+# Expose Cloud Run port
 ENV PORT=8080
 EXPOSE 8080
 
-# Run the app
-CMD ["node", "index.js"]
+# Default command — run app using Xvfb for GUI/browser compatibility
+CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x720x24", "node", "index.js"]
