@@ -1,34 +1,44 @@
 const express = require('express');
 const router = express.Router();
-const { connect } = require("puppeteer-real-browser");
+
+// Delay helper
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 router.get('/', async (req, res) => {
   try {
+    // Dynamically import the ESM module inside async route
+    const { connect } = await import("puppeteer-real-browser");
+
+    const clickAndWaitPlugin = (await import("puppeteer-extra-plugin-click-and-wait")).default;
+
     const { page, browser } = await connect({
-        args: ["--start-maximized"],
-        turnstile: true,
-        headless: false,
-        // disableXvfb: true,
-        customConfig: {},
-        connectOption: {
-          defaultViewport: null,
-        },
-        plugins: [require("puppeteer-extra-plugin-click-and-wait")()],
-      });
-      await page.goto("https://elektrofors.com", { waitUntil: "domcontentloaded" });
-      await page.clickAndWaitForNavigation("body");
-      await delay(10000);
-    await page.screenshot({ path: 'example.png' }); // Use /tmp in Cloud Run or local
-    await delay(1000);
+      args: ["--start-maximized", "--no-sandbox", "--disable-setuid-sandbox"],
+      turnstile: true,
+      headless: false, // Important for xvfb
+      connectOption: {
+        defaultViewport: null,
+      },
+      plugins: [clickAndWaitPlugin()],
+    });
+
+    await page.goto("https://elektrofors.com", { waitUntil: "domcontentloaded" });
+
+    // Wait or simulate interaction
+    await page.clickAndWaitForNavigation("body");
+    await delay(10000);
+
+    // ✅ Save screenshot to /tmp for Cloud Run compatibility
+    await page.screenshot({ path: '/tmp/example.png' });
+
     await browser.close();
 
-    res.send('Screenshot taken successfully.');
+    res.send('✅ Screenshot taken and browser closed.');
   } catch (error) {
-    console.error(error.message);
+    console.error('❌ Puppeteer Error:', error);
     res.status(500).send('Error running Puppeteer');
   }
 });
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-  
+
 module.exports = router;
