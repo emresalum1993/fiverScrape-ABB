@@ -23,6 +23,16 @@ router.get('/', async (req, res) => {
       plugins: [clickAndWaitPlugin()],
     });
 
+    await page.goto("https://elektrofors.com", { waitUntil: "domcontentloaded" });
+
+    // Wait or simulate interaction
+    await page.clickAndWaitForNavigation("body");
+    await delay(10000);
+
+    // ✅ Save screenshot to /tmp for Cloud Run compatibility
+    await page.screenshot({ path: '/tmp/example.png' });
+
+
     await page.goto("https://www.elektrofors.com/schneider-electric-lc1d12m7-tesys-deca-12-amper-5-5-kw-3-kutuplu-kontaktor-220-volt-ac-1na-1nk", { waitUntil: "domcontentloaded" });
 
     // Wait for the price element to be visible
@@ -31,18 +41,14 @@ router.get('/', async (req, res) => {
     // Get the price text
     const priceText = await page.$eval('.product-price', element => element.textContent.trim());
 
+    console.log(priceText)
+    
     await browser.close();
 
-    res.json({ 
-      status: 'success',
-      price: priceText
-    });
+    res.send(priceText);
   } catch (error) {
     console.error('❌ Puppeteer Error:', error);
-    res.status(500).json({ 
-      status: 'error',
-      message: error.message 
-    });
+    res.status(500).send('Error running Puppeteer');
   }
 });
 
