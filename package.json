@@ -19,7 +19,7 @@
     "google-auth-library": "^9.15.1",
     "googleapis": "^148.0.0",
     "p-limit": "^2.3.0",
-    "puppeteer": "^24.8.0",
+    "puppeteer": "22.4.0",
     "puppeteer-cluster": "^0.24.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-click-and-wait": "^2.3.3",
