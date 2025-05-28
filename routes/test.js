@@ -40,7 +40,7 @@ router.get('/s2', async (req, res) => {
 
     // Wait for Cloudflare/Turnstile to pass
     await delay(100);
-    await seedPage.goto(`https://www.elektrofors.com/index.php?route=journal3/product&product_id=1`, { waitUntil: "networkidle2" });
+ 
     const cookies = await seedPage.cookies();
     const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
     const userAgent = await seedPage.evaluate(() => navigator.userAgent);

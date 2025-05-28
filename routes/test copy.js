@@ -118,6 +118,7 @@ router.get('/2', async (req, res) => {
     const productIds = Array.from({ length: 20 }, (_, i) => i + 1);
     const results = [];
 
+    
     console.log('cluster')
     const cluster = await Cluster.launch({
       concurrency: Cluster.CONCURRENCY_PAGE,
