@@ -201,11 +201,31 @@ router.get('/merge', async (req, res) => {
       const row = allRows[i];
       const stockCode = row[1]; // STOCK CODE is the second column
       const price = parseFloat(row[5]) || 0; // PRICE is the sixth column
+      const stock = parseInt(row[4]) || 0; // STOCK is the fifth column
 
       if (!stockCode) continue;
 
-      if (!uniqueRows.has(stockCode) || price < parseFloat(uniqueRows.get(stockCode)[5] || 0)) {
+      if (!uniqueRows.has(stockCode)) {
         uniqueRows.set(stockCode, row);
+      } else {
+        const existingRow = uniqueRows.get(stockCode);
+        const existingPrice = parseFloat(existingRow[5]) || 0;
+        const existingStock = parseInt(existingRow[4]) || 0;
+
+        // If existing price is 0 but new price is valid, replace
+        if (existingPrice === 0 && price > 0) {
+          uniqueRows.set(stockCode, row);
+        }
+        // If both prices are valid, keep the cheaper one
+        else if (existingPrice > 0 && price > 0 && price < existingPrice) {
+          uniqueRows.set(stockCode, row);
+        }
+        // If prices are equal or both zero, merge stock quantities
+        else if (existingPrice === price) {
+          const mergedStock = existingStock + stock;
+          existingRow[4] = mergedStock.toString();
+          uniqueRows.set(stockCode, existingRow);
+        }
       }
     }
 
