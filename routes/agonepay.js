@@ -143,7 +143,7 @@ router.get('/', async (req, res) => {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-  //  executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
@@ -189,7 +189,7 @@ router.get('/', async (req, res) => {
     while (true) {
       const url = `https://agonepay.com/index.php?route=product/search&search=&description=true&limit=70&page=${currentPage}`;
       console.log(`Scraping page ${currentPage}: ${url}`);
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 1200000 });
   
       const hasProducts = await page.$('.main-products .product-layout');
       if (!hasProducts) break;
