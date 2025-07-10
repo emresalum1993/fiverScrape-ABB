@@ -11,7 +11,8 @@ require('dotenv').config();
 const router = express.Router();
 
 const SOURCE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
-const OUTPUT_FOLDER_ID = '1Y3O6OxdS1yMvCTZKJQ-UfmRPjHcJQyr5';
+// Use a Shared Drive ID for output (you'll need to create one and get its ID)
+const OUTPUT_FOLDER_ID = '1Y3O6OxdS1yMvCTZKJQ-UfmRPjHcJQyr5'; // Change this to a Shared Drive ID
 const MERGED_FILE_NAME = 'Product List.xlsx';
 
 const auth = new GoogleAuth({
@@ -98,17 +99,20 @@ async function deleteExistingFile(folderId, fileName) {
     const query = `'${folderId}' in parents and name='${fileName}' and trashed=false`;
     const files = await drive.files.list({
       q: query,
-      fields: 'files(id)',
+      fields: 'files(id, name)',
       spaces: 'drive'
     });
 
-    // If file exists, delete it
+    // Delete all matching files
     if (files.data.files.length > 0) {
       for (const file of files.data.files) {
         await drive.files.delete({ fileId: file.id });
-        console.log(`🗑️ Deleted existing file: ${fileName}`);
+        console.log(`🗑️ Deleted existing file: ${fileName} (ID: ${file.id})`);
       }
+      return true;
     }
+    console.log(`📄 No existing file found: ${fileName}`);
+    return false;
   } catch (error) {
     console.error('Error deleting existing file:', error);
     throw error;
@@ -192,11 +196,11 @@ router.get('/merge', async (req, res) => {
       allRows.push(...(allRows.length === 0 ? validRows : validRows.slice(1)));
     }
 
-    // Create a map to store unique rows based on STOCK CODE
-    const uniqueRows = new Map();
+    // Create a map to store aggregated data based on STOCK CODE
+    const aggregatedRows = new Map();
     const headers = allRows[0];
 
-    // Process each row, keeping only the cheapest price for duplicate STOCK CODEs
+    // Process each row, aggregating stock counts and finding lowest price for each STOCK CODE
     for (let i = 1; i < allRows.length; i++) {
       const row = allRows[i];
       const stockCode = row[1]; // STOCK CODE is the second column
@@ -205,32 +209,82 @@ router.get('/merge', async (req, res) => {
 
       if (!stockCode) continue;
 
-      if (!uniqueRows.has(stockCode)) {
-        uniqueRows.set(stockCode, row);
+      if (!aggregatedRows.has(stockCode)) {
+        // First occurrence of this stock code
+        console.log(`🆕 New stock code found: ${stockCode} (Stock: ${stock}, Price: ${price}, Source: ${row[7]})`);
+        aggregatedRows.set(stockCode, {
+          row: [...row], // Create a copy of the row
+          totalStock: stock,
+          lowestPrice: price,
+          lowestPriceRow: [...row], // Keep track of the row with lowest price
+          sources: stock > 0 ? [row[7]] : [] // Track sources with stock
+        });
       } else {
-        const existingRow = uniqueRows.get(stockCode);
-        const existingPrice = parseFloat(existingRow[5]) || 0;
-        const existingStock = parseInt(existingRow[4]) || 0;
-
-        // If existing price is 0 but new price is valid, replace
-        if (existingPrice === 0 && price > 0) {
-          uniqueRows.set(stockCode, row);
+        // Aggregate stock count and find lowest price
+        const existing = aggregatedRows.get(stockCode);
+        const oldTotalStock = existing.totalStock;
+        const oldLowestPrice = existing.lowestPrice;
+        
+        existing.totalStock += stock;
+        
+        // Add source to sources list if it has stock
+        if (stock > 0 && !existing.sources.includes(row[7])) {
+          existing.sources.push(row[7]);
         }
-        // If both prices are valid, keep the cheaper one
-        else if (existingPrice > 0 && price > 0 && price < existingPrice) {
-          uniqueRows.set(stockCode, row);
+        
+        console.log(`🔄 Aggregating duplicate stock code: ${stockCode}`);
+        console.log(`   📦 Current: Stock=${oldTotalStock}, Price=${oldLowestPrice}, Sources=${existing.row[7]}`);
+        console.log(`   📦 New: Stock=${stock}, Price=${price}, Source=${row[7]}`);
+        
+        // Update lowest price if this price is lower (and valid)
+        if (price > 0 && (existing.lowestPrice === 0 || price < existing.lowestPrice)) {
+          console.log(`   💰 Found lower price: ${price} (was ${existing.lowestPrice})`);
+          existing.lowestPrice = price;
+          existing.lowestPriceRow = [...row];
         }
-        // If prices are equal or both zero, merge stock quantities
-        else if (existingPrice === price) {
-          const mergedStock = existingStock + stock;
-          existingRow[4] = mergedStock.toString();
-          uniqueRows.set(stockCode, existingRow);
+        
+        // Update the aggregated row with new stock count and lowest price data
+        existing.row[4] = existing.totalStock.toString(); // Update stock count
+        if (existing.lowestPrice > 0) {
+          existing.row[5] = existing.lowestPrice.toString(); // Update to lowest price
+          // Also update other fields from the row with lowest price for consistency
+          existing.row[0] = existing.lowestPriceRow[0]; // PRODUCT ID
+          existing.row[2] = existing.lowestPriceRow[2]; // PART DETAILS
+          existing.row[3] = existing.lowestPriceRow[3]; // BRAND
+          existing.row[6] = existing.lowestPriceRow[6]; // CURRENCY
         }
+        
+        // Update source field with all sources that have stock, putting lowest price source first
+        const lowestPriceSource = existing.lowestPriceRow[7];
+        const otherSources = existing.sources.filter(source => source !== lowestPriceSource);
+        const orderedSources = [lowestPriceSource, ...otherSources];
+        existing.row[7] = orderedSources.join(', ');
+        
+        console.log(`   ✅ Result: Stock=${existing.totalStock}, Price=${existing.lowestPrice}, Sources=${existing.row[7]}`);
       }
     }
 
     // Convert to array and add headers
-    const finalRows = [headers, ...Array.from(uniqueRows.values())];
+    const finalRows = [headers, ...Array.from(aggregatedRows.values()).map(item => item.row)];
+    
+    // Log aggregation summary
+    console.log('\n📊 AGGREGATION SUMMARY:');
+    console.log(`Total input rows: ${allRows.length - 1}`);
+    console.log(`Unique stock codes: ${aggregatedRows.size}`);
+    console.log(`Rows reduced by: ${allRows.length - 1 - aggregatedRows.size}`);
+    
+    // Log some examples of aggregated items
+    let exampleCount = 0;
+    for (const [stockCode, data] of aggregatedRows.entries()) {
+      if (exampleCount < 5) { // Show first 5 examples
+        console.log(`   📦 ${stockCode}: Total Stock=${data.totalStock}, Lowest Price=${data.lowestPrice}, Source=${data.row[7]}`);
+        exampleCount++;
+      }
+    }
+    if (aggregatedRows.size > 5) {
+      console.log(`   ... and ${aggregatedRows.size - 5} more items`);
+    }
+    console.log('');
 
     // Create XLSX file
     const wb = XLSX.utils.book_new();
@@ -241,43 +295,45 @@ router.get('/merge', async (req, res) => {
     const tempXlsxPath = path.join(os.tmpdir(), 'merged-products.xlsx');
     XLSX.writeFile(wb, tempXlsxPath);
 
-    // Delete existing file if it exists
-    await deleteExistingFile(OUTPUT_FOLDER_ID, MERGED_FILE_NAME);
-
-    // Create the file metadata
+    // Delete existing file first, then create a new one
+    console.log('🗑️ Checking for existing file to delete...');
+    const fileDeleted = await deleteExistingFile(OUTPUT_FOLDER_ID, MERGED_FILE_NAME);
+    
+    console.log('🆕 Creating new file...');
+    
     const fileMetadata = {
       name: MERGED_FILE_NAME,
       parents: [OUTPUT_FOLDER_ID]
     };
 
-    // Create the media
     const media = {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       body: fs.createReadStream(tempXlsxPath)
     };
 
     try {
-      // Upload the file
       const uploadedFile = await drive.files.create({
         resource: fileMetadata,
         media: media,
         fields: 'id'
       });
 
-      console.log('✅ File uploaded successfully:', uploadedFile.data.id);
+      const fileId = uploadedFile.data.id;
+      console.log('✅ File created successfully:', fileId);
 
       // Clean up temp file
       fs.unlinkSync(tempXlsxPath);
 
       res.json({
         status: 'success',
-        message: 'CSV files merged successfully',
+        message: fileDeleted ? 'CSV files merged, existing file deleted and new file created' : 'CSV files merged and new file created',
         totalRows: finalRows.length - 1, // Excluding header
-        uniqueRows: uniqueRows.size,
-        driveFileId: uploadedFile.data.id
+        uniqueRows: aggregatedRows.size,
+        driveFileId: fileId,
+        fileDeleted: fileDeleted
       });
     } catch (uploadError) {
-      console.error('❌ Error uploading file:', uploadError);
+      console.error('❌ Error uploading/updating file:', uploadError);
       
       // If the error is about the parent folder not existing, try to create it
       if (uploadError.message.includes('File not found')) {
@@ -296,11 +352,17 @@ router.get('/merge', async (req, res) => {
 
           console.log('✅ Created output folder:', folder.data.id);
 
-          // Delete existing file in the new folder if it exists
-          await deleteExistingFile(folder.data.id, MERGED_FILE_NAME);
+          // Try creating file in the new folder
+          const fileMetadata = {
+            name: MERGED_FILE_NAME,
+            parents: [folder.data.id]
+          };
 
-          // Try uploading again with the new folder ID
-          fileMetadata.parents = [folder.data.id];
+          const media = {
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            body: fs.createReadStream(tempXlsxPath)
+          };
+
           const uploadedFile = await drive.files.create({
             resource: fileMetadata,
             media: media,
@@ -312,10 +374,11 @@ router.get('/merge', async (req, res) => {
 
           res.json({
             status: 'success',
-            message: 'CSV files merged successfully',
+            message: 'CSV files merged and file created successfully',
             totalRows: finalRows.length - 1,
-            uniqueRows: uniqueRows.size,
-            driveFileId: uploadedFile.data.id
+            uniqueRows: aggregatedRows.size,
+            driveFileId: uploadedFile.data.id,
+            fileUpdated: false
           });
         } catch (createFolderError) {
           console.error('❌ Error creating folder:', createFolderError);
