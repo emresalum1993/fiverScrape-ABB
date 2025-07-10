@@ -15,6 +15,8 @@ const adselektromarketRoute = require('./routes/adselektromarket');
 const mergeCsvRoute = require('./routes/merge-csv');
 const testRouter = require('./routes/test');
 
+const screenshotRoute = require('./routes/screenshot');
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -25,6 +27,8 @@ app.use('/adselektromarket', adselektromarketRoute);
 app.use('/elektrofors', elektroforsRoute);
 app.use('/merge-csv', mergeCsvRoute);
 app.use('/test', testRouter);
+app.use('/screenshot', screenshotRoute);
+
 
 // Health check
 app.get('/health', (req, res) => {

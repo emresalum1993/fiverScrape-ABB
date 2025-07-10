@@ -226,7 +226,7 @@ router.get('/', async (req, res) => {
 
   await flushToDrive();
 
-  const rows = parseCSV(LOCAL_CSV_PATH);
+ // const rows = parseCSV(LOCAL_CSV_PATH);
   
   res.json({ status: 'done', total: rows.length, driveFileId });
 });
