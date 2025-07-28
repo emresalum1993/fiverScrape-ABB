@@ -5,7 +5,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { google } = require('googleapis');
-const { GoogleAuth } = require('google-auth-library');
 
 require('dotenv').config();
 
@@ -15,20 +14,35 @@ const DRIVE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
 const SHEET_ID = '1lVDDt_mZjuld5Y7QIO9F-4bh9h2fimXGllX5RmOfA8w';
 const SHEET_NAME = 'adselektromarket';
 
-const auth = new GoogleAuth({
-  scopes: [
-    'https://www.googleapis.com/auth/drive.file'
-  ],
-  ...(process.env.NODE_ENV === 'local' && {
-    keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
-  })
+// OAuth2 configuration
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+
+// Set the refresh token
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
 });
+
+// Validate required environment variables
+if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REFRESH_TOKEN) {
+  console.error('❌ Missing required OAuth2 environment variables:');
+  console.error('   - GOOGLE_CLIENT_ID');
+  console.error('   - GOOGLE_CLIENT_SECRET');
+  console.error('   - GOOGLE_REFRESH_TOKEN');
+  console.error('Please set these in your .env file');
+}
+
+const auth = oauth2Client;
 const drive = google.drive({ version: 'v3', auth });
  
 
 const HEADERS = ['productId', 'stockCode', 'name', 'brand', 'stock', 'price', 'currencyCode'];
 const HEADERSSpeaking = ['productId', 'STOCK CODE', 'PART DETAILS', 'BRAND', 'STOCK', 'PRICE', 'CURRENCY'];
 const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'adselektromarket-products.csv');
+console.log(LOCAL_CSV_PATH)
 let driveFileId = null;
 let isFirstWrite = !fs.existsSync(LOCAL_CSV_PATH);
 const existingProductIds = new Set();
@@ -176,7 +190,7 @@ router.get('/', async (req, res) => {
           stockCode: p.supplier_code || '',
           name: p.name || '',
           brand: p.brand || '',
-          currencyCode: p.currency_target || '',
+          currencyCode: 'TRY',
           stock: p.quantity || 0,
           price: isNaN(priceWithoutVat) ? '' : parseFloat(priceWithoutVat.toFixed(2))
         };

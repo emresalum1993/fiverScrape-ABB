@@ -4,7 +4,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { google } = require('googleapis');
-const { GoogleAuth } = require('google-auth-library');
 
 require('dotenv').config();
 
@@ -15,14 +14,28 @@ const DRIVE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
 const SHEET_ID = '1lVDDt_mZjuld5Y7QIO9F-4bh9h2fimXGllX5RmOfA8w';
 const SHEET_NAME = 'agonepay';
 
-const auth = new GoogleAuth({
-  scopes: [
-    'https://www.googleapis.com/auth/drive.file'
-  ],
-  ...(process.env.NODE_ENV === 'local' && {
-    keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
-  })
+// OAuth2 configuration
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+
+// Set the refresh token
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
 });
+
+// Validate required environment variables
+if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REFRESH_TOKEN) {
+  console.error('❌ Missing required OAuth2 environment variables:');
+  console.error('   - GOOGLE_CLIENT_ID');
+  console.error('   - GOOGLE_CLIENT_SECRET');
+  console.error('   - GOOGLE_REFRESH_TOKEN');
+  console.error('Please set these in your .env file');
+}
+
+const auth = oauth2Client;
 const drive = google.drive({ version: 'v3', auth });
 
 
@@ -33,6 +46,8 @@ const csvHeadersSpeaking = ['PRODUCT ID', 'STOCK CODE', 'PART DETAILS', 'BRAND',
 
 
 const LOCAL_CSV_PATH = path.join(os.tmpdir(), 'agonepay-products.csv');
+
+console.log(LOCAL_CSV_PATH)
 let driveFileId = null;
 let isFirstWrite = !fs.existsSync(LOCAL_CSV_PATH);
 const existingProductIds = new Set();
@@ -149,6 +164,8 @@ router.get('/', async (req, res) => {
 
   const page = await browser.newPage();
 
+
+
   await page.setRequestInterception(true);
   page.on('request', (req) => {
     const type = req.resourceType();
@@ -163,13 +180,17 @@ router.get('/', async (req, res) => {
   const products = [];
   let currentPage = 1;
 
+  const cookies = await page.cookies();
+console.log(cookies);
+
   const getStockData = async (page, productId) => {
     return await page.evaluate(async (productId) => {
       try {
         const response = await fetch('index.php?route=journal3/price', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+             
           },
           body: new URLSearchParams({ product_id: productId })
         });
@@ -187,10 +208,29 @@ router.get('/', async (req, res) => {
 
   try {
     while (true) {
+
+      await page.setCookie({
+        name: 'currency',
+        value: 'TR',
+        domain: 'agonepay.com',
+        path: '/',
+      });
+
+      
+
       const url = `https://agonepay.com/index.php?route=product/search&search=&description=true&limit=70&page=${currentPage}`;
       console.log(`Scraping page ${currentPage}: ${url}`);
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 1200000 });
   
+
+      // Simulate selecting TRY currency
+await page.evaluate(() => {
+  const form = document.querySelector('#form-currency');
+  form.querySelector('input[name="code"]').value = 'TRY';
+  form.submit();
+});
+await page.waitForNavigation({ waitUntil: 'domcontentloaded' });
+
       const hasProducts = await page.$('.main-products .product-layout');
       if (!hasProducts) break;
   

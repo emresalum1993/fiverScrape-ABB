@@ -1,6 +1,5 @@
 const express = require('express');
 const { google } = require('googleapis');
-const { GoogleAuth } = require('google-auth-library');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -11,20 +10,32 @@ require('dotenv').config();
 const router = express.Router();
 
 const SOURCE_FOLDER_ID = '1QAcbMndwRukzmsmap5o6nm9jMzVCXOmD';
-// Use a Shared Drive ID for output (you'll need to create one and get its ID)
-const OUTPUT_FOLDER_ID = '1Y3O6OxdS1yMvCTZKJQ-UfmRPjHcJQyr5'; // Change this to a Shared Drive ID
+const EXISTING_FILE_ID = '15xLEkd6_PEhowX2sd2LWAgMYbEttrlFb'; // Your existing Google Sheets file
 const MERGED_FILE_NAME = 'Product List.xlsx';
+const OUTPUT_FOLDER_ID = '1Y3O6OxdS1yMvCTZKJQ-UfmRPjHcJQyr5'; // Folder where new files will be created
 
-const auth = new GoogleAuth({
-  scopes: [
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive.readonly'
-  ],
-  ...(process.env.NODE_ENV === 'local' && {
-    keyFile: path.join(__dirname, '../credentials/weekly-stock-price-dashboard-614dc05eaa42.json')
-  })
+// OAuth2 configuration
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+
+// Set the refresh token
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
 });
+
+// Validate required environment variables
+if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REFRESH_TOKEN) {
+  console.error('❌ Missing required OAuth2 environment variables:');
+  console.error('   - GOOGLE_CLIENT_ID');
+  console.error('   - GOOGLE_CLIENT_SECRET');
+  console.error('   - GOOGLE_REFRESH_TOKEN');
+  console.error('Please set these in your .env file');
+}
+
+const auth = oauth2Client;
 
 const drive = google.drive({ version: 'v3', auth });
 
@@ -88,33 +99,30 @@ function isValidRow(row) {
   row[3] = cleanCellValue(brand); // BRAND
   row[4] = normalizeStockValue(stock); // STOCK
   row[5] = cleanCellValue(price); // PRICE
-  row[6] = cleanCellValue(currency); // CURRENCY
+  row[6] = cleanCellValue('TRY'); // CURRENCY
   
   return true;
 }
 
-async function deleteExistingFile(folderId, fileName) {
+async function updateExistingFile(fileId, filePath) {
   try {
-    // Search for the file in the specified folder
-    const query = `'${folderId}' in parents and name='${fileName}' and trashed=false`;
-    const files = await drive.files.list({
-      q: query,
-      fields: 'files(id, name)',
-      spaces: 'drive'
+    console.log(`🔄 Updating existing file: ${fileId}`);
+    
+    const media = {
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      body: fs.createReadStream(filePath)
+    };
+
+    const updatedFile = await drive.files.update({
+      fileId: fileId,
+      media: media,
+      fields: 'id, name'
     });
 
-    // Delete all matching files
-    if (files.data.files.length > 0) {
-      for (const file of files.data.files) {
-        await drive.files.delete({ fileId: file.id });
-        console.log(`🗑️ Deleted existing file: ${fileName} (ID: ${file.id})`);
-      }
-      return true;
-    }
-    console.log(`📄 No existing file found: ${fileName}`);
-    return false;
+    console.log(`✅ File updated successfully: ${updatedFile.data.name} (ID: ${updatedFile.data.id})`);
+    return updatedFile.data;
   } catch (error) {
-    console.error('Error deleting existing file:', error);
+    console.error('Error updating existing file:', error);
     throw error;
   }
 }
@@ -251,7 +259,8 @@ router.get('/merge', async (req, res) => {
           existing.row[0] = existing.lowestPriceRow[0]; // PRODUCT ID
           existing.row[2] = existing.lowestPriceRow[2]; // PART DETAILS
           existing.row[3] = existing.lowestPriceRow[3]; // BRAND
-          existing.row[6] = existing.lowestPriceRow[6]; // CURRENCY
+        //  existing.row[6] = existing.lowestPriceRow[6]; // CURRENCY
+        existing.row[6] = 'TRY'; // CURRENCY
         }
         
         // Update source field with all sources that have stock, putting lowest price source first
@@ -295,99 +304,67 @@ router.get('/merge', async (req, res) => {
     const tempXlsxPath = path.join(os.tmpdir(), 'merged-products.xlsx');
     XLSX.writeFile(wb, tempXlsxPath);
 
-    // Delete existing file first, then create a new one
-    console.log('🗑️ Checking for existing file to delete...');
-    const fileDeleted = await deleteExistingFile(OUTPUT_FOLDER_ID, MERGED_FILE_NAME);
+    // Update the existing file with new content
+    console.log('🔄 Updating existing file with new merged data...');
     
-    console.log('🆕 Creating new file...');
-    
-    const fileMetadata = {
-      name: MERGED_FILE_NAME,
-      parents: [OUTPUT_FOLDER_ID]
-    };
-
-    const media = {
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      body: fs.createReadStream(tempXlsxPath)
-    };
-
     try {
-      const uploadedFile = await drive.files.create({
-        resource: fileMetadata,
-        media: media,
-        fields: 'id'
-      });
-
-      const fileId = uploadedFile.data.id;
-      console.log('✅ File created successfully:', fileId);
+      const updatedFile = await updateExistingFile(EXISTING_FILE_ID, tempXlsxPath);
+      const fileId = updatedFile.id;
 
       // Clean up temp file
       fs.unlinkSync(tempXlsxPath);
 
       res.json({
         status: 'success',
-        message: fileDeleted ? 'CSV files merged, existing file deleted and new file created' : 'CSV files merged and new file created',
+        message: 'CSV files merged and existing file updated successfully',
         totalRows: finalRows.length - 1, // Excluding header
         uniqueRows: aggregatedRows.size,
         driveFileId: fileId,
-        fileDeleted: fileDeleted
+        fileUpdated: true
       });
-    } catch (uploadError) {
-      console.error('❌ Error uploading/updating file:', uploadError);
-      
-      // If the error is about the parent folder not existing, try to create it
-      if (uploadError.message.includes('File not found')) {
-        try {
-          // Create the output folder
-          const folderMetadata = {
-            name: 'Merged Products',
-            mimeType: 'application/vnd.google-apps.folder',
-            parents: [OUTPUT_FOLDER_ID]
-          };
+          } catch (uploadError) {
+        console.error('❌ Error updating file:', uploadError);
+        
+        // If the file doesn't exist, create it
+        if (uploadError.message.includes('File not found')) {
+          try {
+            console.log('📄 File not found, creating new file in specified folder...');
+            
+            const fileMetadata = {
+              name: MERGED_FILE_NAME,
+              parents: [OUTPUT_FOLDER_ID] // Create in the specified output folder
+            };
 
-          const folder = await drive.files.create({
-            resource: folderMetadata,
-            fields: 'id'
-          });
+            const media = {
+              mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              body: fs.createReadStream(tempXlsxPath)
+            };
 
-          console.log('✅ Created output folder:', folder.data.id);
+            const uploadedFile = await drive.files.create({
+              resource: fileMetadata,
+              media: media,
+              fields: 'id'
+            });
 
-          // Try creating file in the new folder
-          const fileMetadata = {
-            name: MERGED_FILE_NAME,
-            parents: [folder.data.id]
-          };
+            // Clean up temp file
+            fs.unlinkSync(tempXlsxPath);
 
-          const media = {
-            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            body: fs.createReadStream(tempXlsxPath)
-          };
-
-          const uploadedFile = await drive.files.create({
-            resource: fileMetadata,
-            media: media,
-            fields: 'id'
-          });
-
-          // Clean up temp file
-          fs.unlinkSync(tempXlsxPath);
-
-          res.json({
-            status: 'success',
-            message: 'CSV files merged and file created successfully',
-            totalRows: finalRows.length - 1,
-            uniqueRows: aggregatedRows.size,
-            driveFileId: uploadedFile.data.id,
-            fileUpdated: false
-          });
-        } catch (createFolderError) {
-          console.error('❌ Error creating folder:', createFolderError);
-          throw createFolderError;
+            res.json({
+              status: 'success',
+              message: 'CSV files merged and new file created (existing file not found)',
+              totalRows: finalRows.length - 1,
+              uniqueRows: aggregatedRows.size,
+              driveFileId: uploadedFile.data.id,
+              fileUpdated: false
+            });
+          } catch (createFileError) {
+            console.error('❌ Error creating new file:', createFileError);
+            throw createFileError;
+          }
+        } else {
+          throw uploadError;
         }
-      } else {
-        throw uploadError;
       }
-    }
 
   } catch (error) {
     console.error('Error merging CSV files:', error);
